@@ -1,0 +1,315 @@
+/* ===================================================================
+   HazelNote — styles.css
+   =================================================================== */
+
+/* ── Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ── Dark mode transition — applied via JS inline styles for max compatibility ── */
+/* We use a class-based approach here as a reliable fallback */
+body { transition: background-color 0.3s ease, color 0.3s ease; }
+body aside { transition: background-color 0.3s ease, border-color 0.3s ease; }
+body .glass-card { transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease; }
+
+/* ── Base ── */
+body { font-family: 'Inter', sans-serif; background-color: #F9FAFB; color: #111827; min-height: 100vh; min-height: 100dvh; }
+
+/* Sidebar - sticky so it stays visible but doesn't cause blank space */
+aside { position: sticky; top: 0; align-self: flex-start; height: 100vh; height: 100dvh; overflow-y: auto; flex-shrink: 0; }
+main { margin-left: 0; flex: 1; min-width: 0; }
+
+@media (max-width: 768px) {
+    aside { position: relative; width: 100% !important; height: auto !important; }
+    body.flex { flex-direction: column; }
+    main { margin-left: 0; }
+}
+
+/* Eliminate tap delay on mobile devices to ensure buttons feel instant */
+button, a, .sidebar-item, .quiz-option, .exam-opt { 
+    cursor: pointer; 
+    touch-action: manipulation; 
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS: ensure all interactive elements have minimum 44px touch target */
+button { min-height: 36px; }
+
+/* Universal tap highlight removal */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* ── Glass Card ── */
+.glass-card {
+    background: white;
+    border-radius: 24px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.03), 0 1px 3px rgba(0,0,0,.02);
+    border: 1px solid #F3F4F6;
+}
+
+/* ── Prose / Notes ── */
+.prose strong       { color: #059669; font-weight: 700; }
+.prose h2           { color: #111827; font-size: 1.5rem; font-weight: 700; margin-top: 2rem; margin-bottom: 1rem; border-bottom: 2px solid #F3F4F6; padding-bottom: .5rem; }
+.prose h3           { color: #374151; font-size: 1.25rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: .75rem; }
+.prose ul           { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; color: #4B5563; }
+.prose p            { margin-bottom: 1rem; color: #4B5563; line-height: 1.7; }
+.prose table        { width: 100%; border-collapse: collapse; margin-top: 1.5rem; margin-bottom: 1.5rem; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.05); display: block; overflow-x: auto; }
+.prose th           { background-color: #F3F4F6; text-align: left; padding: 12px 16px; font-weight: 600; color: #374151; white-space: nowrap; }
+.prose td           { padding: 12px 16px; border-top: 1px solid #E5E7EB; color: #4B5563; background: white; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .prose table { font-size: .875rem; }
+    .prose th, .prose td { padding: 8px 12px; }
+}
+@media (min-width: 768px) and (max-width: 1024px) {
+    aside { width: 220px !important; }
+    .flip-card { height: 180px; }
+}
+@media (max-width: 640px) {
+    #view-dashboard, #view-create, #view-profile { padding: 1rem !important; }
+    #view-study        { padding: .75rem !important; padding-bottom: 6rem !important; }
+    .glass-card        { border-radius: 16px !important; }
+    .flip-card         { height: 180px; }
+    #content-notes     { padding: 1rem !important; }
+    .go-pro-badge      { font-size: .7rem; padding: 3px 8px; }
+}
+
+/* ── Flip Cards ── */
+.flip-card { width: 100%; height: 220px; perspective: 1000px; cursor: pointer; touch-action: manipulation; }
+.flip-card-inner { position: relative; width: 100%; height: 100%; transition: transform .6s cubic-bezier(.4,.2,.2,1); transform-style: preserve-3d; }
+.flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+.flip-card-front, .flip-card-back {
+    position: absolute; width: 100%; height: 100%; backface-visibility: hidden;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 2rem; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,.05); border: 1px solid #F3F4F6;
+}
+.flip-card-front { background: white; color: #111827; font-weight: 600; font-size: 1.125rem; text-align: center; }
+.flip-card-back  { background: #10B981; color: white; transform: rotateY(180deg); text-align: center; font-size: 1.05rem; overflow-y: auto; }
+
+/* ── Audio visualiser ── */
+.bar { width: 4px; height: 12px; background: #10B981; border-radius: 4px; margin: 0 3px; animation: sound 0s -.4s linear infinite alternate; transition: height .2s; }
+@keyframes sound { 0% { height: 4px; opacity: .5; } 100% { height: 32px; opacity: 1; } }
+.animate-sound .bar { animation-duration: 400ms; }
+
+/* ── Sidebar items ── */
+.sidebar-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 12px; color: #4B5563; font-weight: 500; transition: all .2s; }
+.sidebar-item:hover  { background-color: #F3F4F6; color: #111827; }
+.sidebar-item.active { background-color: #ECFDF5; color: #059669; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar         { width: 8px; }
+::-webkit-scrollbar-track   { background: transparent; }
+::-webkit-scrollbar-thumb   { background: #E5E7EB; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #D1D5DB; }
+
+/* ── Range slider ── */
+input[type="range"]::-webkit-slider-thumb {
+    appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #10B981; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,.2);
+}
+input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #10B981; cursor: pointer; border: none; box-shadow: 0 2px 4px rgba(0,0,0,.2);
+}
+
+/* ── AI tooltip ── */
+#ai-tooltip {
+    display: none; position: absolute; background: #10B981; color: white;
+    padding: 8px 16px; border-radius: 12px; font-size: 12px; font-weight: 700;
+    cursor: pointer; z-index: 1000; transform: translateX(-50%);
+    box-shadow: 0 4px 12px rgba(16,185,129,.3);
+}
+#ai-tooltip:hover { background: #059669; }
+
+/* ── Progress bar ── */
+#progress-bar { max-width: 100%; }
+.progress-container { overflow: hidden; border-radius: 9999px; }
+
+/* ── Print ── */
+@media print {
+    aside, #input-section, #chat-modal, .no-print { display: none !important; }
+    main { overflow: visible !important; background: white; }
+    .glass-card { box-shadow: none; border: none; }
+}
+
+/* ── Keyframes ── */
+@keyframes shimmer   { 0%   { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+@keyframes slide-in  { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes slide-out { from { transform: translateX(0); opacity: 1; } to { transform: translateX(400px); opacity: 0; } }
+.animate-slide-in { animation: slide-in .3s ease-out; }
+
+/* ── Pro Button Morping Animation ── */
+.morph-pro-btn {
+    animation: morphProBtn 5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    white-space: nowrap;
+    overflow: hidden;
+    transform-origin: right center;
+}
+
+@keyframes morphProBtn {
+    0%   { max-width: 200px; opacity: 0; transform: scale(0.9); margin-right: 12px; }
+    5%   { max-width: 200px; opacity: 1; transform: scale(1);   margin-right: 12px; }
+    75%  { max-width: 200px; opacity: 1; transform: scale(1);   margin-right: 12px; }
+    100% { max-width: 0; opacity: 0; transform: scale(0.5); margin-right: 0; padding-left: 0; padding-right: 0; border: none; }
+}
+
+/* ── Loading skeleton ── */
+.skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 8px;
+}
+
+/* ── AI info card dark mode ── */
+body.dark .bg-blue-50 { background-color: #1E3A5F !important; }
+body.dark .bg-blue-100 { background-color: #1E3A5F !important; }
+body.dark .border-blue-100 { border-color: #2D4A6F !important; }
+body.dark .text-blue-900 { color: #93C5FD !important; }
+body.dark .text-blue-600 { color: #60A5FA !important; }
+
+/* ── Enhanced button definition ── */
+.btn-primary {
+    background: #10B981; color: white; border-radius: 9999px;
+    transition: all 0.2s; font-weight: 600;
+    border: 1px solid rgba(0,0,0,0.08);
+}
+.btn-primary:hover { background: #059669; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,.3); }
+
+.btn-secondary {
+    background: white; color: #374151; border: 1.5px solid #E5E7EB;
+    border-radius: 9999px; transition: all 0.2s; font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+}
+.btn-secondary:hover { background: #F9FAFB; border-color: #D1D5DB; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+
+body.dark .btn-secondary { background: #1E293B; color: #E2E8F0; border-color: #475569; }
+body.dark .btn-secondary:hover { background: #334155; }
+.go-pro-badge { background: linear-gradient(135deg,#F59E0B,#EF4444); color: white; font-weight: 700; font-size: .75rem; padding: 4px 12px; border-radius: 9999px; transition: all .2s; box-shadow: 0 2px 8px rgba(245,158,11,.4); }
+.go-pro-badge:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245,158,11,.5); }
+
+/* ── Quiz option ── */
+.quiz-option { user-select: none; -webkit-user-select: none; }
+.quiz-option:disabled { cursor: default; }
+
+/* =================================================================
+   DARK MODE
+   ================================================================= */
+body.dark { background-color: #0F172A; color: #E2E8F0; }
+body.dark aside { background: #1E293B; border-color: #334155; }
+body.dark main { background: #0F172A; }
+
+body.dark .glass-card { background: #1E293B; border-color: #334155; box-shadow: 0 4px 20px rgba(0,0,0,.3); }
+
+body.dark .sidebar-item        { color: #94A3B8; }
+body.dark .sidebar-item:hover  { background-color: #334155; color: #E2E8F0; }
+body.dark .sidebar-item.active { background-color: #064E3B; color: #34D399; }
+
+/* Prose */
+body.dark .prose p, body.dark .prose ul { color: #CBD5E1; }
+body.dark .prose h2     { color: #F1F5F9; border-color: #334155; }
+body.dark .prose h3     { color: #CBD5E1; }
+body.dark .prose strong { color: #34D399; }
+body.dark .prose th     { background-color: #1E293B; color: #CBD5E1; }
+body.dark .prose td     { background: #0F172A; color: #94A3B8; border-color: #334155; }
+
+/* Form inputs */
+body.dark input, body.dark textarea, body.dark select { background: #1E293B !important; color: #E2E8F0; border-color: #334155 !important; }
+
+/* Tailwind bg overrides */
+body.dark .bg-white    { background-color: #1E293B !important; }
+body.dark .bg-gray-50  { background-color: #0F172A !important; }
+body.dark .bg-gray-100 { background-color: #1E293B !important; }
+
+/* Tailwind text overrides */
+body.dark .text-gray-900 { color: #F1F5F9 !important; }
+body.dark .text-gray-800 { color: #E2E8F0 !important; }
+body.dark .text-gray-700 { color: #CBD5E1 !important; }
+body.dark .text-gray-600 { color: #94A3B8 !important; }
+body.dark .text-gray-500 { color: #64748B !important; }
+body.dark .text-gray-400 { color: #475569 !important; }
+
+/* Tailwind border overrides */
+body.dark .border-gray-200 { border-color: #334155 !important; }
+body.dark .border-gray-100 { border-color: #1E293B !important; }
+
+/* Colour tint backgrounds */
+body.dark .bg-green-50  { background-color: #064E3B !important; }
+body.dark .bg-blue-50   { background-color: #1E3A5F !important; }
+
+/* Colour tint text */
+body.dark .text-blue-700, body.dark .text-blue-600   { color: #93C5FD !important; }
+body.dark .text-green-700, body.dark .text-green-600 { color: #6EE7B7 !important; }
+body.dark h3.text-green-700 { color: #34D399 !important; }
+
+/* Exec summary */
+body.dark .bg-green-50\/60 { background-color: rgba(6,78,59,.5) !important; border-color: rgba(16,185,129,.25) !important; }
+body.dark .bg-green-50\/60 #notes-summary { color: #A7F3D0 !important; }
+body.dark #notes-summary, body.dark #notes-body { color: #CBD5E1; }
+
+/* AI tutor panel */
+body.dark #ai-tutor-panel { background: #1E293B; }
+
+/* Shadows */
+body.dark .shadow-green-200,
+body.dark .shadow-lg,
+body.dark .shadow-xl,
+body.dark .shadow-2xl { box-shadow: 0 4px 20px rgba(0,0,0,.5) !important; }
+
+/* Study set cards */
+body.dark #recent-study-sets .glass-card        { background: #1E293B !important; border: 1px solid #334155 !important; }
+body.dark #recent-study-sets .glass-card h4     { color: #F1F5F9 !important; }
+body.dark #recent-study-sets .glass-card p      { color: #94A3B8 !important; }
+body.dark #recent-study-sets .bg-blue-50        { background-color: #1E3A5F !important; color: #93C5FD !important; }
+body.dark #recent-study-sets .bg-green-50       { background-color: #064E3B !important; color: #6EE7B7 !important; }
+body.dark #recent-study-sets .text-blue-700     { color: #93C5FD !important; }
+body.dark #recent-study-sets .text-green-700    { color: #6EE7B7 !important; }
+
+/* Flip cards */
+body.dark .flip-card-front { background: #1E293B !important; color: #E2E8F0 !important; border-color: #334155 !important; }
+
+/* Quiz options */
+body.dark .quiz-option                { background: #1E293B !important; border-color: #334155 !important; color: #CBD5E1 !important; }
+body.dark .quiz-option:hover:not(:disabled) { background: #334155 !important; }
+body.dark .quiz-option strong         { color: #94A3B8 !important; }
+
+/* Exam options */
+body.dark .exam-opt                         { background: #1E293B !important; border-color: #334155 !important; color: #CBD5E1 !important; }
+body.dark .exam-opt:hover                   { background: #2D3748 !important; }
+body.dark .exam-opt strong                  { color: #94A3B8 !important; }
+body.dark .exam-opt.bg-blue-50              { background: #1E3A5F !important; border-color: #3B82F6 !important; color: #93C5FD !important; }
+body.dark .exam-opt.bg-blue-50 strong       { color: #60A5FA !important; }
+body.dark .exam-opt.bg-green-100            { background: #064E3B !important; border-color: #34D399 !important; color: #6EE7B7 !important; }
+body.dark .exam-opt.bg-green-100 strong     { color: #34D399 !important; }
+body.dark .exam-opt.bg-red-100              { background: #450A0A !important; border-color: #F87171 !important; color: #FCA5A5 !important; }
+body.dark .exam-opt.bg-red-100 strong       { color: #F87171 !important; }
+
+/* FIXED dark mode toggle - smaller height, same width */
+#dark-mode-toggle {
+    width: 48px; 
+    height: 20px;
+    background: #e2e8f0;
+    border-radius: 9999px;
+    position: relative;
+    transition: background-color 0.3s ease;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+body.dark #dark-mode-toggle {
+    background: #10b981;
+}
+#dark-mode-thumb {
+    width: 14px; 
+    height: 14px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 3px; 
+    left: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: transform 0.3s ease;
+}
+body.dark #dark-mode-thumb {
+    transform: translateX(28px);
+}
+
+/* Rest of your styles.css remains unchanged */
