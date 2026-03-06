@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ===================================================================
    HazelNote — styles.css
    =================================================================== */
@@ -311,5 +315,3 @@ body.dark #dark-mode-toggle {
 body.dark #dark-mode-thumb {
     transform: translateX(28px);
 }
-
-/* Rest of your styles.css remains unchanged */
