@@ -1,5 +1,6 @@
 import './globals.css';
-import { AppProvider } from '@/context/AppContext';
+// CHANGED: Using relative path instead of the @/ shortcut
+import { AppProvider } from '../context/AppContext';
 
 export const metadata = {
   title: 'HazelNote',
