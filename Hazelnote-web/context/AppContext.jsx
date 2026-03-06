@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useContext, useState, useEffect } from 'react';
-import { auth, db } from '@/lib/firebase'; // Your initialized firebase config
+// CHANGED: Using relative path instead of the @/ shortcut
+import { auth, db } from '../lib/firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
 
 const AppContext = createContext();
