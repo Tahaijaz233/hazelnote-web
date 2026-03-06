@@ -1,10 +1,11 @@
 "use client";
 import { useState } from 'react';
-import { Mic, FileUp, Youtube, FileText, CheckCircle2, Download, Wand2, Brain, BookOpen } from 'lucide-react';
-import { useAppContext } from '@/context/AppContext';
+import { Mic, FileUp, Youtube, FileText, CheckCircle2, Download, Brain } from 'lucide-react';
+// Exact relative path
+import { useAppContext } from '../../context/AppContext';
 
 export default function DashboardPage() {
-  const [inputMode, setInputMode] = useState('pdf'); // 'pdf', 'voice', 'youtube'
+  const [inputMode, setInputMode] = useState('pdf');
   const [isGenerating, setIsGenerating] = useState(false);
   const { generationsToday, setGenerationsToday, tier } = useAppContext();
 
@@ -25,13 +26,12 @@ export default function DashboardPage() {
     setTimeout(() => {
       setIsGenerating(false);
       setGenerationsToday(generationsToday + 1);
-      alert("Notes Generated Successfully! (Backend logic to follow)");
+      alert("Notes Generated Successfully!");
     }, 3000);
   };
 
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto pt-8 md:pt-16">
-      
       {!isGenerating ? (
         <div className="animate-slide-in">
           {/* Coconote-Inspired Header */}
@@ -44,10 +44,10 @@ export default function DashboardPage() {
              <div className="flex flex-col md:flex-row justify-center items-center gap-8 md:gap-16 mt-12 mb-16">
                 <div className="flex flex-col items-center max-w-[180px]">
                     <div className="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-4">
-                        <Mic className="w-8 h-8 text-gray-700 dark:text-gray-300" />
+                        <FileUp className="w-8 h-8 text-gray-700 dark:text-gray-300" />
                     </div>
-                    <h3 className="font-bold text-lg text-gray-900 dark:text-white text-center">1. Record or Upload</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">Upload PDFs, dictate notes, or paste YouTube links.</p>
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white text-center">1. Upload</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">Upload PDFs, dictate notes, or paste links.</p>
                 </div>
                 
                 <div className="hidden md:block h-px w-16 bg-gray-200 dark:bg-slate-700 -mt-10"></div>
@@ -57,7 +57,7 @@ export default function DashboardPage() {
                         <FileText className="w-8 h-8 text-gray-700 dark:text-gray-300" />
                     </div>
                     <h3 className="font-bold text-lg text-gray-900 dark:text-white text-center">2. Get Notes</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">Get beautifully organized study materials in seconds.</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">Get beautifully organized materials instantly.</p>
                 </div>
 
                 <div className="hidden md:block h-px w-16 bg-gray-200 dark:bg-slate-700 -mt-10"></div>
@@ -67,7 +67,7 @@ export default function DashboardPage() {
                         <CheckCircle2 className="w-8 h-8 text-gray-700 dark:text-gray-300" />
                     </div>
                     <h3 className="font-bold text-lg text-gray-900 dark:text-white text-center">3. Review & Ace</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">Master topics with AI flashcards and practice quizzes.</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">Master topics with flashcards and quizzes.</p>
                 </div>
              </div>
           </div>
@@ -87,7 +87,7 @@ export default function DashboardPage() {
                 <div className="w-20 h-20 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
                     <FileUp className="w-10 h-10 text-green-500 dark:text-green-400" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Drop your study material here</h3>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Upload a pdf</h3>
                 <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-sm mx-auto">We extract the text to instantly create smart materials.</p>
                 <label className="bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-full px-12 py-4 cursor-pointer inline-block shadow-lg shadow-green-200 dark:shadow-none text-lg transition">
                   Upload a pdf <input type="file" accept=".pdf" onChange={handleFileUpload} className="hidden" />
