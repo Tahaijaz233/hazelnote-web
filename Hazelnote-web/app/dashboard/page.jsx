@@ -1,129 +1,135 @@
 "use client";
 import { useState } from 'react';
-import { Flame, FileCheck2, Sparkles, FileUp, Mic, Youtube, FileText, Download, Wand2, Brain } from 'lucide-react';
+import { Mic, FileUp, Youtube, FileText, CheckCircle2, Download, Wand2, Brain, BookOpen } from 'lucide-react';
+import { useAppContext } from '@/context/AppContext';
 
 export default function DashboardPage() {
-  // Using React State for UI toggles instead of Vanilla JS
-  const [activeView, setActiveView] = useState('dashboard'); // 'dashboard', 'create'
   const [inputMode, setInputMode] = useState('pdf'); // 'pdf', 'voice', 'youtube'
   const [isGenerating, setIsGenerating] = useState(false);
+  const { generationsToday, setGenerationsToday, tier } = useAppContext();
+
+  const handleFileUpload = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+        triggerGenerate();
+    }
+  };
 
   const triggerGenerate = () => {
+    if (tier === 'free' && generationsToday >= 1) {
+        alert("You have reached your daily limit of 1 study set for the free tier. Please upgrade to Pro to generate more today!");
+        return;
+    }
+
     setIsGenerating(true);
     // Simulate generation delay
     setTimeout(() => {
       setIsGenerating(false);
-      setActiveView('dashboard');
-      alert("Notes Generated! (Backend logic will be wired here)");
+      setGenerationsToday(generationsToday + 1);
+      alert("Notes Generated Successfully! (Backend logic to follow)");
     }, 3000);
   };
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto pt-8 md:pt-12">
+    <div className="p-6 md:p-10 max-w-5xl mx-auto pt-8 md:pt-16">
       
-      {/* View: DASHBOARD */}
-      {activeView === 'dashboard' && (
+      {!isGenerating ? (
         <div className="animate-slide-in">
-          <header className="mb-10">
-            <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-2 tracking-tight">Welcome back! 👋</h2>
-            <p className="text-gray-500 text-lg">Track your progress and continue learning.</p>
-          </header>
+          {/* Coconote-Inspired Header */}
+          <div className="text-center mb-16">
+             <h1 className="text-4xl md:text-6xl font-extrabold text-gray-900 dark:text-white mb-6 tracking-tight">
+                HazelNote keeps it <span className="text-[#10B981]">simple.</span>
+             </h1>
+             
+             {/* 3 Steps Overview */}
+             <div className="flex flex-col md:flex-row justify-center items-center gap-8 md:gap-16 mt-12 mb-16">
+                <div className="flex flex-col items-center max-w-[180px]">
+                    <div className="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-4">
+                        <Mic className="w-8 h-8 text-gray-700 dark:text-gray-300" />
+                    </div>
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white text-center">1. Record or Upload</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">Upload PDFs, dictate notes, or paste YouTube links.</p>
+                </div>
+                
+                <div className="hidden md:block h-px w-16 bg-gray-200 dark:bg-slate-700 -mt-10"></div>
+                
+                <div className="flex flex-col items-center max-w-[180px]">
+                    <div className="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-4">
+                        <FileText className="w-8 h-8 text-gray-700 dark:text-gray-300" />
+                    </div>
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white text-center">2. Get Notes</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">Get beautifully organized study materials in seconds.</p>
+                </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-            <div className="bg-white border border-gray-100 rounded-[24px] shadow-sm p-6 flex items-center gap-5 transition hover:shadow-lg">
-              <div className="w-14 h-14 rounded-2xl bg-green-100 flex items-center justify-center text-green-600"><Flame className="w-7 h-7" /></div>
-              <div><p className="text-sm text-gray-500 font-medium">Study Streak</p><p className="text-3xl font-extrabold text-gray-900">0 <span className="text-lg text-gray-400 font-medium">Days</span></p></div>
-            </div>
-            <div className="bg-white border border-gray-100 rounded-[24px] shadow-sm p-6 flex items-center gap-5 transition hover:shadow-lg">
-              <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-600"><FileCheck2 className="w-7 h-7" /></div>
-              <div><p className="text-sm text-gray-500 font-medium">Notes Generated</p><p className="text-3xl font-extrabold text-gray-900">0</p></div>
-            </div>
+                <div className="hidden md:block h-px w-16 bg-gray-200 dark:bg-slate-700 -mt-10"></div>
+                
+                <div className="flex flex-col items-center max-w-[180px]">
+                    <div className="w-16 h-16 bg-gray-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-4">
+                        <CheckCircle2 className="w-8 h-8 text-gray-700 dark:text-gray-300" />
+                    </div>
+                    <h3 className="font-bold text-lg text-gray-900 dark:text-white text-center">3. Review & Ace</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center mt-2">Master topics with AI flashcards and practice quizzes.</p>
+                </div>
+             </div>
           </div>
 
-          <div className="bg-white border border-gray-100 rounded-[24px] shadow-sm p-8 md:p-12 text-center relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-blue-500"></div>
-            <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500"><Sparkles className="w-10 h-10" /></div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">Ready to learn something new?</h3>
-            <p className="text-gray-500 mb-8 max-w-md mx-auto">Upload PDFs, dictate voice notes, or paste YouTube URLs to generate your next study set.</p>
-            <button onClick={() => setActiveView('create')} className="bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-full px-10 py-4 text-lg shadow-xl shadow-green-200 transition">Create New Study Set</button>
-          </div>
-
-          <div className="mt-10">
-            <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-bold text-gray-900">Recent Study Sets</h3>
+          {/* Creation Area */}
+          <div className="max-w-3xl mx-auto">
+            {/* Mode Selector */}
+            <div className="bg-white dark:bg-slate-800 p-2 rounded-[32px] flex flex-col sm:flex-row gap-2 mb-8 shadow-sm border border-gray-100 dark:border-slate-700">
+              <button onClick={() => setInputMode('pdf')} className={`flex-1 py-3.5 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'pdf' ? 'bg-[#10B981] text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700'}`}><FileUp className="w-4 h-4" /> PDF Upload</button>
+              <button onClick={() => setInputMode('voice')} className={`flex-1 py-3.5 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'voice' ? 'bg-[#10B981] text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700'}`}><Mic className="w-4 h-4" /> Voice Record</button>
+              <button onClick={() => setInputMode('youtube')} className={`flex-1 py-3.5 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'youtube' ? 'bg-[#10B981] text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700'}`}><Youtube className="w-4 h-4" /> YouTube</button>
             </div>
-            <div className="space-y-4">
-                <p className="text-gray-400 text-center py-8">No study sets yet. Create your first one!</p>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* View: CREATE NOTES */}
-      {activeView === 'create' && (
-        <div className="max-w-4xl mx-auto animate-slide-in">
-          <div className="mb-6">
-             <button onClick={() => setActiveView('dashboard')} className="text-gray-500 hover:text-gray-900 transition text-sm font-bold flex items-center gap-2">← Back to Dashboard</button>
-          </div>
-          <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-8 text-center tracking-tight">What are we studying today?</h2>
-          
-          {!isGenerating ? (
-            <div>
-              {/* Mode Selector */}
-              <div className="bg-white p-2 rounded-[32px] flex flex-col md:flex-row gap-2 mb-10 mx-auto max-w-2xl shadow-xl shadow-gray-100 border border-gray-100">
-                <button onClick={() => setInputMode('pdf')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'pdf' ? 'bg-green-500 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}><FileUp className="w-4 h-4" /> PDF Upload</button>
-                <button onClick={() => setInputMode('voice')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'voice' ? 'bg-green-500 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}><Mic className="w-4 h-4" /> Voice Record</button>
-                <button onClick={() => setInputMode('youtube')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'youtube' ? 'bg-green-500 text-white shadow-md' : 'text-gray-500 hover:bg-gray-50'}`}><Youtube className="w-4 h-4" /> YouTube</button>
+            {/* Inputs */}
+            {inputMode === 'pdf' && (
+              <div className="bg-white dark:bg-slate-800 rounded-[32px] p-10 text-center shadow-lg border border-gray-100 dark:border-slate-700">
+                <div className="w-20 h-20 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <FileUp className="w-10 h-10 text-green-500 dark:text-green-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Drop your study material here</h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-sm mx-auto">We extract the text to instantly create smart materials.</p>
+                <label className="bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-full px-12 py-4 cursor-pointer inline-block shadow-lg shadow-green-200 dark:shadow-none text-lg transition">
+                  Upload a pdf <input type="file" accept=".pdf" onChange={handleFileUpload} className="hidden" />
+                </label>
               </div>
+            )}
 
-              {/* Dynamic Inputs */}
-              {inputMode === 'pdf' && (
-                <div className="bg-white rounded-[24px] p-8 md:p-12 text-center border-2 border-dashed border-gray-300">
-                  <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold mb-2">Upload Multiple PDFs</h3>
-                  <p className="text-gray-500 mb-8 max-w-sm mx-auto">Upload documents to be instantly processed via Gemini AI.</p>
-                  <label className="bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-full px-10 py-4 cursor-pointer inline-block shadow-lg text-lg transition">
-                    Browse Files <input type="file" multiple accept=".pdf" className="hidden" />
-                  </label>
-                </div>
-              )}
-
-              {inputMode === 'voice' && (
-                <div className="bg-white rounded-[24px] p-8 md:p-12 text-center shadow-sm border border-gray-100">
-                  <textarea className="w-full h-40 p-5 border border-gray-200 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-50 text-base" placeholder="Type or dictate your notes..."></textarea>
-                  <button className="bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-full px-6 py-3 flex items-center justify-center gap-2 mx-auto mt-6 transition-all duration-300">
-                     <Mic className="w-4 h-4" /> Start Dictation
-                  </button>
-                </div>
-              )}
-
-              {inputMode === 'youtube' && (
-                <div className="bg-white rounded-[24px] p-8 md:p-10 shadow-sm border border-gray-100">
-                  <div className="flex flex-col md:flex-row gap-3 mb-4">
-                    <input type="text" className="flex-1 border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 bg-gray-50 text-sm font-medium" placeholder="Paste YouTube URL here..." />
-                    <button className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"><Download className="w-4 h-4" /> Fetch</button>
-                  </div>
-                  <textarea className="w-full h-48 p-5 border border-gray-200 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-50 text-sm font-mono" placeholder="Transcript will appear here..."></textarea>
-                </div>
-              )}
-
-              <div className="mt-10 text-center">
-                <button onClick={triggerGenerate} className="bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-full px-10 md:px-16 py-4 md:py-5 text-lg md:text-xl shadow-xl shadow-green-200 w-full md:w-auto flex items-center justify-center gap-3 mx-auto transition">
-                  <Wand2 className="w-6 h-6" /> Generate Study Set
+            {inputMode === 'voice' && (
+              <div className="bg-white dark:bg-slate-800 rounded-[32px] p-8 shadow-lg border border-gray-100 dark:border-slate-700 text-center">
+                <textarea className="w-full h-40 p-5 border border-gray-200 dark:border-slate-600 rounded-2xl focus:outline-none focus:border-[#10B981] bg-gray-50 dark:bg-slate-900 text-base resize-none" placeholder="Type or dictate your lecture notes..."></textarea>
+                <button onClick={triggerGenerate} className="bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-full px-8 py-4 flex items-center justify-center gap-2 mx-auto mt-6 transition-all shadow-lg">
+                   <Mic className="w-5 h-5" /> Start Dictation
                 </button>
               </div>
+            )}
+
+            {inputMode === 'youtube' && (
+              <div className="bg-white dark:bg-slate-800 rounded-[32px] p-8 shadow-lg border border-gray-100 dark:border-slate-700">
+                <div className="flex flex-col sm:flex-row gap-3 mb-6">
+                  <input type="text" className="flex-1 border border-gray-200 dark:border-slate-600 rounded-2xl px-5 py-4 focus:outline-none focus:border-[#10B981] bg-gray-50 dark:bg-slate-900 text-base font-medium" placeholder="Paste YouTube URL here..." />
+                  <button onClick={triggerGenerate} className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition shadow-lg"><Download className="w-5 h-5" /> Fetch</button>
+                </div>
+              </div>
+            )}
+
+            <div className="text-center mt-6">
+                <span className="text-sm font-bold text-gray-500 dark:text-gray-400">
+                    {generationsToday} / 1 Daily Study Sets Used
+                </span>
             </div>
-          ) : (
-            // Loading State
-            <div className="max-w-2xl mx-auto mt-10 text-center bg-white rounded-[24px] border border-gray-100 p-8 md:p-12 relative overflow-hidden shadow-sm">
-              <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-6"><Brain className="w-8 h-8 text-green-600 animate-pulse" /></div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Synthesizing Knowledge...</h3>
-              <p className="text-sm font-medium text-gray-500 animate-pulse">Processing with AI models...</p>
-            </div>
-          )}
+          </div>
+        </div>
+      ) : (
+        // Loading State
+        <div className="max-w-2xl mx-auto mt-16 text-center bg-white dark:bg-slate-800 rounded-[32px] border border-gray-100 dark:border-slate-700 p-12 relative overflow-hidden shadow-xl">
+          <div className="w-20 h-20 bg-green-50 dark:bg-green-900/30 rounded-3xl flex items-center justify-center mx-auto mb-8">
+              <Brain className="w-10 h-10 text-green-500 dark:text-green-400 animate-pulse" />
+          </div>
+          <h3 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-3 tracking-tight">Synthesizing Knowledge...</h3>
+          <p className="text-lg font-medium text-gray-500 dark:text-gray-400 animate-pulse">Reading content and generating study materials.</p>
         </div>
       )}
-
     </div>
   );
 }
