@@ -2,7 +2,6 @@
 import { useState } from 'react';
 
 export default function LoginPage() {
-  // Using React State instead of document.getElementById().classList
   const [activeTab, setActiveTab] = useState('in'); // 'in', 'up', 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,9 +15,12 @@ export default function LoginPage() {
     showAlert("Firebase logic will be wired here via AppContext!", "ok");
   };
 
+  const handleGoogleSignIn = () => {
+    showAlert("Google Auth will be connected via Firebase!", "ok");
+  };
+
   return (
     <div className="bg-[#0F172A] min-h-screen flex items-center justify-center p-4 relative overflow-hidden text-white">
-      {/* Background Orbs */}
       <div className="fixed rounded-full filter blur-[90px] opacity-12 pointer-events-none w-80 h-80 bg-green-500 -top-[8%] -left-[8%]"></div>
       <div className="fixed rounded-full filter blur-[90px] opacity-12 pointer-events-none w-64 h-64 bg-blue-600 -bottom-[5%] -right-[5%]"></div>
 
@@ -31,7 +33,6 @@ export default function LoginPage() {
           <div className="text-xs text-slate-400 mt-1">by free-ed · AI Study Workspace</div>
         </div>
 
-        {/* Tab Switcher */}
         {activeTab !== 'reset' && (
           <div className="flex bg-slate-900/50 rounded-xl p-1 mb-5 border border-white/5">
             <button onClick={() => setActiveTab('in')} className={`flex-1 p-2 rounded-lg font-semibold text-sm transition ${activeTab === 'in' ? 'bg-emerald-500/15 text-emerald-500' : 'text-slate-400 hover:text-slate-200'}`}>Sign In</button>
@@ -39,15 +40,13 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Alerts */}
         {alert.show && (
           <div className={`p-3 rounded-xl text-sm font-medium mb-4 border ${alert.type === 'ok' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-red-500/15 text-red-300 border-red-500/30'}`}>
             {alert.msg}
           </div>
         )}
 
-        {/* Google Auth */}
-        <button className="w-full p-3 bg-white/5 border border-white/10 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-white/10 transition mb-4">
+        <button type="button" onClick={handleGoogleSignIn} className="w-full p-3 bg-white/5 border border-white/10 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-white/10 transition mb-4">
           <svg width="18" height="18" viewBox="0 0 48 48">
             <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/>
             <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/>
@@ -63,7 +62,6 @@ export default function LoginPage() {
           <div className="flex-1 h-px bg-white/10"></div>
         </div>
 
-        {/* Dynamic Forms based on State */}
         <form onSubmit={handleSignIn} className="flex flex-col gap-4">
           {activeTab === 'up' && (
             <div>
