@@ -1,24 +1,19 @@
-"use client";
-import { useState } from 'react';
-import Link from 'next/link';
-import { LayoutDashboard, PlusCircle, UserCircle } from 'lucide-react';
+import './globals.css';
+import { AppProvider } from '@/context/AppContext';
 
-export default function DashboardLayout({ children }) {
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+export const metadata = {
+  title: 'HazelNote',
+  description: 'AI-Powered Study Workspace',
+};
 
-    return (
-        <div className="flex h-screen overflow-hidden bg-gray-50">
-            {/* Sidebar Component Here */}
-            <aside className={`w-72 bg-white border-r border-gray-200 ...`}>
-                <Link href="/dashboard" className="sidebar-item"><LayoutDashboard /> Dashboard</Link>
-                <Link href="/dashboard/create" className="sidebar-item"><PlusCircle /> Create</Link>
-                <Link href="/dashboard/profile" className="sidebar-item"><UserCircle /> Profile</Link>
-            </aside>
-            
-            {/* Main Content Area */}
-            <main className="flex-1 h-full overflow-y-auto">
-                {children}
-            </main>
-        </div>
-    );
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <body>
+        <AppProvider>
+          {children}
+        </AppProvider>
+      </body>
+    </html>
+  );
 }
