@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useAppContext } from '../../context/AppContext';
+import { useAppContext } from '../context/AppContext';
 import Link from 'next/link';
 
 export default function DashboardPage() {
@@ -153,3 +153,4 @@ export default function DashboardPage() {
         </div>
     );
 }
+
