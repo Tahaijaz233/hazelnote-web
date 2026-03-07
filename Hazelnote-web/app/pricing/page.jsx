@@ -7,7 +7,6 @@ export default function PricingPage() {
 
   return (
     <div className="bg-[#0F172A] min-h-screen text-white">
-      {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0F172A]/90 backdrop-blur-lg border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <a href="/" className="flex items-center gap-3 hover:opacity-90 transition">
@@ -30,7 +29,7 @@ export default function PricingPage() {
 
       <section className="pt-32 pb-12 px-6">
         <div className="max-w-6xl mx-auto text-center">
-          <h1 className="text-5xl md:text-6xl font-extrabold mb-6 leading-tight">Choose Your <span className="gradient-text">Study Plan</span></h1>
+          <h1 className="text-5xl md:text-6xl font-extrabold mb-6 leading-tight">Choose Your <span className="text-[#10B981]">Study Plan</span></h1>
           <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">Start for free or unlock advanced features with Pro & Max plans</p>
           
           <div className="flex justify-center mb-10">
@@ -67,7 +66,7 @@ export default function PricingPage() {
               <span className="text-5xl font-extrabold">{isAnnual ? '$5.10' : '$6'}</span>
               <span className="text-gray-300 text-sm">{isAnnual ? '/mo (billed annually)' : '/mo'}</span>
             </div>
-            <a href="/login" className="block w-full py-3 px-6 text-center btn-primary font-bold rounded-xl mb-8">Upgrade to Pro</a>
+            <a href="/login" className="block w-full py-3 px-6 text-center bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-xl mb-8 transition">Upgrade to Pro</a>
             <div className="space-y-4 text-sm md:text-base">
               <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 shrink-0" /><span className="font-semibold">Unlimited daily study sets</span></div>
               <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 shrink-0" /><span>PDF upload (up to 50MB)</span></div>
@@ -84,13 +83,12 @@ export default function PricingPage() {
               <span className="text-5xl font-extrabold">{isAnnual ? '$10.20' : '$12'}</span>
               <span className="text-gray-400 text-sm">{isAnnual ? '/mo (billed annually)' : '/mo'}</span>
             </div>
-            <a href="/login" className="block w-full py-3 px-6 text-center bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-bold rounded-xl transition mb-8 shadow-lg shadow-purple-500/25 relative z-10">Upgrade to Max</a>
+            <a href="/login" className="block w-full py-3 px-6 text-center bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-bold rounded-xl transition mb-8 shadow-lg shadow-purple-500/25 relative z-10 text-white">Upgrade to Max</a>
             <div className="space-y-4 relative z-10 text-sm md:text-base">
               <div className="flex items-start gap-3"><Zap className="w-5 h-5 text-purple-400 shrink-0" /><span className="font-semibold">Everything in Pro, plus:</span></div>
               <div className="flex items-start gap-3"><Check className="w-5 h-5 text-purple-400 shrink-0" /><span>PDF upload (up to 100 MB)</span></div>
               <div className="flex items-start gap-3"><Check className="w-5 h-5 text-purple-400 shrink-0" /><span>AI grading for long-form essays</span></div>
               <div className="flex items-start gap-3"><Check className="w-5 h-5 text-purple-400 shrink-0" /><span>Up to 30 Questions per Exam Set</span></div>
-              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-purple-400 shrink-0" /><span>Priority Customer Support</span></div>
             </div>
           </div>
         </div>
