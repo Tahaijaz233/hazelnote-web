@@ -6,7 +6,17 @@ import { useAppContext } from '../context/AppContext';
 import { usePathname } from 'next/navigation';
 
 export default function DashboardLayout({ children }) {
-    const { isDarkMode, toggleTheme, user, isPro, isMax, userTier } = useAppContext();
+    // SAFE DESTRUCTURING FIX: Added `|| {}` and defaults so it never crashes during Vercel builds
+    const context = useAppContext() || {};
+    const { 
+        isDarkMode = false, 
+        toggleTheme = () => {}, 
+        user = null, 
+        isPro = false, 
+        isMax = false, 
+        userTier = 'free' 
+    } = context;
+
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const pathname = usePathname();
 
@@ -108,4 +118,3 @@ export default function DashboardLayout({ children }) {
         </div>
     );
 }
-
