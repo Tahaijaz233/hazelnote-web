@@ -1,5 +1,5 @@
 "use client";
-import { ArrowRight, BookOpen, Brain, Zap, Clock, Star, LayoutDashboard, Mic, FileUp, CheckCircle2, Bot } from 'lucide-react';
+import { ArrowRight, BookOpen, Brain, Zap, Clock, Star, LayoutDashboard, FileUp, FileText, CheckCircle2, Bot } from 'lucide-react';
 
 export default function LandingPage() {
   return (
@@ -45,18 +45,46 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Meet Professor Hazel Card */}
-      <section className="py-12 px-6">
-        <div className="max-w-5xl mx-auto bg-gradient-to-br from-emerald-900/40 to-slate-800/80 border border-emerald-500/20 rounded-[40px] p-8 md:p-16 flex flex-col md:flex-row items-center gap-10 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 blur-[80px]"></div>
-            <img src="/hazelnote_tutor.png" alt="Professor Hazel" className="w-48 h-48 md:w-64 md:h-64 object-cover rounded-3xl shadow-2xl z-10 border-4 border-emerald-500/20" />
-            <div className="z-10 text-center md:text-left">
-                <div className="inline-flex items-center gap-2 text-emerald-400 font-bold mb-3 uppercase tracking-widest text-sm"><Bot className="w-5 h-5"/> Meet Your AI Tutor</div>
-                <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-4">Professor Hazel</h2>
-                <p className="text-gray-300 text-lg md:text-xl leading-relaxed mb-6">
-                    Got a question about your notes? Stuck on a complex topic? Professor Hazel is embedded directly into your workspace to answer questions, explain concepts simply, and test your knowledge on the fly.
-                </p>
+      {/* 6 Features Section */}
+      <section id="features" className="py-24 px-6 relative">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-5xl font-extrabold mb-4">Everything you need to <span className="text-emerald-400">Excel</span></h2>
+            <p className="text-gray-400 text-lg">Built for students who want to study smarter, not harder.</p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
+              <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center mb-6"><BookOpen className="w-6 h-6"/></div>
+              <h3 className="text-xl font-bold mb-3">Smart Flashcards</h3>
+              <p className="text-gray-400 leading-relaxed">Instantly generated flashcards from your notes to help you memorize key terms effortlessly.</p>
             </div>
+            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
+              <div className="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center mb-6"><Brain className="w-6 h-6"/></div>
+              <h3 className="text-xl font-bold mb-3">Custom Practice Exams</h3>
+              <p className="text-gray-400 leading-relaxed">Generate rigorous MCQ and written exams tailored to standard curriculums (IB, SAT, A-Levels).</p>
+            </div>
+            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
+              <div className="w-12 h-12 bg-purple-500/20 text-purple-400 rounded-xl flex items-center justify-center mb-6"><Zap className="w-6 h-6"/></div>
+              <h3 className="text-xl font-bold mb-3">YouTube to Notes</h3>
+              <p className="text-gray-400 leading-relaxed">Paste any educational YouTube link and watch it magically transform into a comprehensive study guide.</p>
+            </div>
+            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
+              <div className="w-12 h-12 bg-orange-500/20 text-orange-400 rounded-xl flex items-center justify-center mb-6"><Clock className="w-6 h-6"/></div>
+              <h3 className="text-xl font-bold mb-3">Live Voice Dictation</h3>
+              <p className="text-gray-400 leading-relaxed">Record your professor's lecture live in class, and let HazelNote clean up the transcript automatically.</p>
+            </div>
+            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
+              <div className="w-12 h-12 bg-pink-500/20 text-pink-400 rounded-xl flex items-center justify-center mb-6"><Star className="w-6 h-6"/></div>
+              <h3 className="text-xl font-bold mb-3">AI Essay Grading</h3>
+              <p className="text-gray-400 leading-relaxed">Submit your structured answers and essays for instant feedback, rubrics, and improvement tips.</p>
+            </div>
+            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
+              <div className="w-12 h-12 bg-cyan-500/20 text-cyan-400 rounded-xl flex items-center justify-center mb-6"><LayoutDashboard className="w-6 h-6"/></div>
+              <h3 className="text-xl font-bold mb-3">Organized Workspaces</h3>
+              <p className="text-gray-400 leading-relaxed">Keep all your subjects perfectly sorted in folders, allowing you to track your daily study streaks.</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -99,51 +127,25 @@ export default function LandingPage() {
           </div>
       </section>
 
-      {/* 6 Features Section */}
-      <section id="features" className="py-24 px-6 relative">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-extrabold mb-4">Everything you need to <span className="text-emerald-400">Excel</span></h2>
-            <p className="text-gray-400 text-lg">Built for students who want to study smarter, not harder.</p>
-          </div>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="bg-slate-800/50 border border-gray-700 p-8 rounded-3xl hover:bg-slate-800 transition">
-              <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center mb-6"><BookOpen className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">Smart Flashcards</h3>
-              <p className="text-gray-400 leading-relaxed">Instantly generated flashcards from your notes to help you memorize key terms effortlessly.</p>
+      {/* Professor Hazel Card (Redesigned) */}
+      <section className="py-24 px-6 relative z-10">
+        <div className="max-w-5xl mx-auto bg-gradient-to-br from-[#0F172A] to-[#1E293B] border border-emerald-500/20 rounded-[40px] p-8 md:p-16 flex flex-col md:flex-row items-center gap-10 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-full bg-emerald-500/5 blur-[100px] pointer-events-none"></div>
+            <img src="/hazelnote_tutor.png" alt="Professor Hazel" className="w-56 h-56 md:w-80 md:h-80 object-cover rounded-[32px] shadow-2xl z-10 border border-emerald-500/30" />
+            <div className="z-10 text-center md:text-left">
+                <div className="inline-flex items-center gap-2 text-emerald-400 font-bold mb-4 uppercase tracking-widest text-sm"><Bot className="w-5 h-5"/> Meet Your AI Tutor</div>
+                <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6">Professor Hazel</h2>
+                <p className="text-gray-300 text-lg md:text-xl leading-relaxed mb-8">
+                    Got a question about your notes? Stuck on a complex topic? Professor Hazel is embedded directly into your workspace to answer questions, explain concepts simply, and test your knowledge on the fly.
+                </p>
+                <a href="/login" className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-3 rounded-full font-bold transition shadow-lg">
+                    Chat with Hazel <ArrowRight className="w-4 h-4"/>
+                </a>
             </div>
-            <div className="bg-slate-800/50 border border-gray-700 p-8 rounded-3xl hover:bg-slate-800 transition">
-              <div className="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center mb-6"><Brain className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">Custom Practice Exams</h3>
-              <p className="text-gray-400 leading-relaxed">Generate rigorous MCQ and written exams tailored to standard curriculums (IB, SAT, A-Levels).</p>
-            </div>
-            <div className="bg-slate-800/50 border border-gray-700 p-8 rounded-3xl hover:bg-slate-800 transition">
-              <div className="w-12 h-12 bg-purple-500/20 text-purple-400 rounded-xl flex items-center justify-center mb-6"><Zap className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">YouTube to Notes</h3>
-              <p className="text-gray-400 leading-relaxed">Paste any educational YouTube link and watch it magically transform into a comprehensive study guide.</p>
-            </div>
-            <div className="bg-slate-800/50 border border-gray-700 p-8 rounded-3xl hover:bg-slate-800 transition">
-              <div className="w-12 h-12 bg-orange-500/20 text-orange-400 rounded-xl flex items-center justify-center mb-6"><Clock className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">Live Voice Dictation</h3>
-              <p className="text-gray-400 leading-relaxed">Record your professor's lecture live in class, and let HazelNote clean up the transcript automatically.</p>
-            </div>
-            <div className="bg-slate-800/50 border border-gray-700 p-8 rounded-3xl hover:bg-slate-800 transition">
-              <div className="w-12 h-12 bg-pink-500/20 text-pink-400 rounded-xl flex items-center justify-center mb-6"><Star className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">AI Essay Grading</h3>
-              <p className="text-gray-400 leading-relaxed">Submit your structured answers and essays for instant feedback, rubrics, and improvement tips.</p>
-            </div>
-            <div className="bg-slate-800/50 border border-gray-700 p-8 rounded-3xl hover:bg-slate-800 transition">
-              <div className="w-12 h-12 bg-cyan-500/20 text-cyan-400 rounded-xl flex items-center justify-center mb-6"><LayoutDashboard className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">Organized Workspaces</h3>
-              <p className="text-gray-400 leading-relaxed">Keep all your subjects perfectly sorted in folders, allowing you to track your daily study streaks.</p>
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-gray-800 py-12 px-6">
+      <footer className="border-t border-gray-800 py-12 px-6 bg-[#0F172A]">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2">
             <img src="/hazelnote_logo.png" alt="Logo" className="w-8 h-6 rounded" />
