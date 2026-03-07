@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
+import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
   const [activeTab, setActiveTab] = useState('in');
@@ -9,20 +10,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [alert, setAlert] = useState({ show: false, msg: '', type: '' });
+  const router = useRouter();
 
   const showAlert = (msg, type) => setAlert({ show: true, msg, type });
 
   const handleSignIn = (e) => {
     e.preventDefault();
-    showAlert("Email auth is currently disabled, use Google Login.", "error");
+    showAlert("Email auth is currently disabled, please use Google Login.", "error");
   };
 
   const handleGoogleSignIn = async () => {
-    const provider = new GoogleAuthProvider();
     try {
+        const provider = new GoogleAuthProvider();
         await signInWithPopup(auth, provider);
-        // Successful login, redirect to dashboard
-        window.location.href = '/dashboard';
+        // Safely redirect using Next.js router
+        router.push('/dashboard');
     } catch (error) {
         showAlert(error.message, "error");
     }
@@ -30,7 +32,7 @@ export default function LoginPage() {
 
   return (
     <div className="bg-[#0F172A] min-h-screen flex items-center justify-center p-4 relative overflow-hidden text-white">
-      <div className="fixed rounded-full filter blur-[90px] opacity-12 pointer-events-none w-80 h-80 bg-green-500 -top-[8%] -left-[8%]"></div>
+      <div className="fixed rounded-full filter blur-[90px] opacity-12 pointer-events-none w-80 h-80 bg-emerald-500 -top-[8%] -left-[8%]"></div>
       <div className="fixed rounded-full filter blur-[90px] opacity-12 pointer-events-none w-64 h-64 bg-blue-600 -bottom-[5%] -right-[5%]"></div>
 
       <div className="bg-slate-800/80 backdrop-blur-xl border border-white/10 rounded-3xl w-full max-w-sm p-8 shadow-2xl relative z-10">
