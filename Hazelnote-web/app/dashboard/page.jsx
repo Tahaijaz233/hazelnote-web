@@ -1,5 +1,5 @@
 "use client";
-import { Folder, FolderPlus, FolderEdit, Flame, FileText, Brain } from 'lucide-react';
+import { Folder, FolderPlus, FolderEdit, Flame, FileText, Brain, Search, Clock } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 export default function DashboardOverview() {
@@ -8,7 +8,7 @@ export default function DashboardOverview() {
     return (
         <div className="p-6 md:p-10 max-w-6xl mx-auto pt-8 md:pt-12">
             <header className="mb-10">
-                <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 dark:text-white">Welcome back{user ? `, ${user.displayName?.split(' ')[0] || 'Student'}` : ''}! 👋</h1>
+                <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 dark:text-white">Welcome back{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''}! 👋</h1>
                 <p className="text-gray-500 dark:text-gray-400 mt-2">Ready to conquer your next exam?</p>
             </header>
 
@@ -20,7 +20,7 @@ export default function DashboardOverview() {
                     </div>
                     <div>
                         <p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Study Streak</p>
-                        <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white">3 Days</h3>
+                        <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white">0 Days</h3>
                     </div>
                 </div>
 
@@ -29,7 +29,7 @@ export default function DashboardOverview() {
                         <FileText className="w-7 h-7 text-blue-500" />
                     </div>
                     <div>
-                        <p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sets Generated</p>
+                        <p className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Notes Generated</p>
                         <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white">{generationsToday} Sets</h3>
                     </div>
                 </div>
@@ -45,7 +45,7 @@ export default function DashboardOverview() {
                 </div>
             </div>
 
-            {/* Folders & Study Sets */}
+            {/* Folders Section */}
             <div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                     <div className="flex items-center gap-3">
@@ -66,14 +66,15 @@ export default function DashboardOverview() {
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-[#1E293B] border border-gray-100 dark:border-slate-800 rounded-3xl p-8 text-center shadow-sm">
+                {/* Empty State - Replaced when sets are generated */}
+                <div className="bg-white dark:bg-[#1E293B] border border-gray-100 dark:border-slate-800 rounded-3xl p-12 text-center shadow-sm">
                     <div className="w-20 h-20 bg-gray-50 dark:bg-slate-800/50 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100 dark:border-slate-700">
-                        <FileText className="w-8 h-8 text-gray-400" />
+                        <Clock className="w-8 h-8 text-gray-400" />
                     </div>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">No study sets in this folder</h3>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">Create your first set of notes to get started.</p>
-                    <a href="/dashboard/create" className="inline-flex items-center gap-2 px-6 py-3 bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-xl transition shadow-lg shadow-green-200 dark:shadow-none">
-                        Create Notes
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">No study sets in this folder yet.</h3>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">Your generated notes, flashcards, and quizzes will appear here.</p>
+                    <a href="/dashboard/create" className="inline-flex items-center gap-2 px-6 py-3 bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-xl transition shadow-lg shadow-emerald-200 dark:shadow-none">
+                        Create New Notes
                     </a>
                 </div>
             </div>
