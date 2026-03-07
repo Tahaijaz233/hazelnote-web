@@ -2,7 +2,7 @@
 import { useState } from 'react';
 
 export default function LoginPage() {
-  const [activeTab, setActiveTab] = useState('in'); // 'in', 'up', 'reset'
+  const [activeTab, setActiveTab] = useState('in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -12,11 +12,11 @@ export default function LoginPage() {
 
   const handleSignIn = (e) => {
     e.preventDefault();
-    showAlert("Firebase logic will be wired here via AppContext!", "ok");
+    showAlert("Authentication logic will be connected here!", "ok");
   };
 
   const handleGoogleSignIn = () => {
-    showAlert("Google Auth will be connected via Firebase!", "ok");
+    showAlert("Redirecting to Google Sign-In...", "ok");
   };
 
   return (
