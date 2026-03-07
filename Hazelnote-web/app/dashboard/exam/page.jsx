@@ -1,11 +1,23 @@
 "use client";
 import { useState } from 'react';
 import { Search, List } from 'lucide-react';
+// Exact relative path (3 levels deep)
+import { useAppContext } from '../../../context/AppContext';
 
 export default function ExamPage() {
   const [board, setBoard] = useState('general');
   const [qType, setQType] = useState('mcq');
   const [qCount, setQCount] = useState(5);
+  const { tier } = useAppContext();
+
+  const handleGenerate = () => {
+    // Enforce tier restrictions for question counts
+    if (qCount >= 20 && tier === 'free') {
+        alert(`Generating ${qCount} questions requires a Pro or Max subscription.`);
+        return;
+    }
+    alert("Generating Exam...");
+  };
 
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto pt-8 md:pt-12">
@@ -15,7 +27,6 @@ export default function ExamPage() {
       <p className="text-gray-500 dark:text-gray-400 mb-8">Generate a customised exam based on your notes.</p>
 
       <div className="space-y-6">
-        {/* Board Search */}
         <div className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-[24px] shadow-sm p-6">
           <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Search className="w-5 h-5 text-purple-500" /> Board / Curriculum</h3>
           <div className="flex flex-wrap gap-2 mb-3">
@@ -27,7 +38,6 @@ export default function ExamPage() {
           </div>
         </div>
 
-        {/* Settings Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-[24px] shadow-sm p-5">
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Difficulty</label>
@@ -47,7 +57,6 @@ export default function ExamPage() {
           </div>
         </div>
 
-        {/* Question Type */}
         <div className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-[24px] shadow-sm p-5">
           <h3 className="font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2"><List className="w-5 h-5 text-blue-500" /> Question Type</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -64,7 +73,6 @@ export default function ExamPage() {
           </div>
         </div>
 
-        {/* Question Count */}
         <div className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-[24px] shadow-sm p-5">
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Number of Questions</label>
             <div className="flex gap-4 flex-wrap">
@@ -78,7 +86,7 @@ export default function ExamPage() {
             </div>
         </div>
 
-        <button className="w-full bg-[#10B981] hover:bg-[#059669] text-white rounded-full font-bold transition py-4 text-lg shadow-xl shadow-green-200 dark:shadow-none">Generate Exam</button>
+        <button onClick={handleGenerate} className="w-full bg-[#10B981] hover:bg-[#059669] text-white rounded-full font-bold transition py-4 text-lg shadow-xl shadow-green-200 dark:shadow-none">Generate Exam</button>
       </div>
     </div>
   );
