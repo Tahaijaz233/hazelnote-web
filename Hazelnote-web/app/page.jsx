@@ -1,163 +1,110 @@
-"use client";
-import { ArrowRight, BookOpen, Brain, Zap, Clock, Star, LayoutDashboard, FileUp, FileText, CheckCircle2, Bot } from 'lucide-react';
+'use client';
 
-export default function LandingPage() {
-  return (
-    <div className="bg-[#0F172A] min-h-screen text-white font-sans overflow-x-hidden selection:bg-[#10B981] selection:text-white">
-      {/* Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0F172A]/80 backdrop-blur-lg border-b border-gray-800">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/hazelnote_logo.png" alt="HazelNote" className="w-12 h-8 object-fill rounded" />
-            <div className="flex flex-col">
-              <span className="text-xl font-extrabold text-white leading-none">HazelNote</span>
-              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">by free-ed</span>
-            </div>
-          </div>
-          <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm font-semibold text-gray-300 hover:text-white transition">Features</a>
-            <a href="/pricing" className="text-sm font-semibold text-gray-300 hover:text-white transition">Pricing</a>
-            <a href="/login" className="text-sm font-semibold text-gray-300 hover:text-white transition">Sign In</a>
-            <a href="/login" className="bg-[#10B981] hover:bg-[#059669] px-5 py-2.5 rounded-full text-sm font-bold transition shadow-lg shadow-emerald-900/20">Get Started</a>
-          </div>
-        </div>
-      </nav>
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { useAppContext } from '../../context/AppContext';
+import { usePathname } from 'next/navigation';
 
-      {/* Hero Section */}
-      <section className="pt-40 pb-20 px-6 relative">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/20 rounded-full blur-[120px] pointer-events-none"></div>
-        <div className="max-w-4xl mx-auto text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-bold mb-8">
-            <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
-            HazelNote AI is Live
-          </div>
-          <h1 className="text-5xl md:text-7xl font-extrabold mb-6 leading-[1.1] tracking-tight">
-            Turn any lecture into <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-600">perfect notes</span> instantly.
-          </h1>
-          <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed">
-            Upload PDFs, dictate live lectures, or paste YouTube links. HazelNote creates study guides, flashcards, and exams in seconds.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a href="/login" className="w-full sm:w-auto px-8 py-4 bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-full transition flex items-center justify-center gap-2 text-lg shadow-xl shadow-emerald-900/20">
-              Start Studying Free <ArrowRight className="w-5 h-5" />
-            </a>
-          </div>
-        </div>
-      </section>
+export default function DashboardLayout({ children }) {
+    const { isDarkMode, toggleTheme, user, isPro, isMax, userTier } = useAppContext();
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const pathname = usePathname();
 
-      {/* 6 Features Section */}
-      <section id="features" className="py-24 px-6 relative">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-extrabold mb-4">Everything you need to <span className="text-emerald-400">Excel</span></h2>
-            <p className="text-gray-400 text-lg">Built for students who want to study smarter, not harder.</p>
-          </div>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
-              <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-xl flex items-center justify-center mb-6"><BookOpen className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">Smart Flashcards</h3>
-              <p className="text-gray-400 leading-relaxed">Instantly generated flashcards from your notes to help you memorize key terms effortlessly.</p>
-            </div>
-            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
-              <div className="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center mb-6"><Brain className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">Custom Practice Exams</h3>
-              <p className="text-gray-400 leading-relaxed">Generate rigorous MCQ and written exams tailored to standard curriculums (IB, SAT, A-Levels).</p>
-            </div>
-            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
-              <div className="w-12 h-12 bg-purple-500/20 text-purple-400 rounded-xl flex items-center justify-center mb-6"><Zap className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">YouTube to Notes</h3>
-              <p className="text-gray-400 leading-relaxed">Paste any educational YouTube link and watch it magically transform into a comprehensive study guide.</p>
-            </div>
-            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
-              <div className="w-12 h-12 bg-orange-500/20 text-orange-400 rounded-xl flex items-center justify-center mb-6"><Clock className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">Live Voice Dictation</h3>
-              <p className="text-gray-400 leading-relaxed">Record your professor's lecture live in class, and let HazelNote clean up the transcript automatically.</p>
-            </div>
-            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
-              <div className="w-12 h-12 bg-pink-500/20 text-pink-400 rounded-xl flex items-center justify-center mb-6"><Star className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">AI Essay Grading</h3>
-              <p className="text-gray-400 leading-relaxed">Submit your structured answers and essays for instant feedback, rubrics, and improvement tips.</p>
-            </div>
-            <div className="bg-[#1E293B] border border-gray-800 p-8 rounded-3xl hover:bg-slate-800 transition shadow-lg">
-              <div className="w-12 h-12 bg-cyan-500/20 text-cyan-400 rounded-xl flex items-center justify-center mb-6"><LayoutDashboard className="w-6 h-6"/></div>
-              <h3 className="text-xl font-bold mb-3">Organized Workspaces</h3>
-              <p className="text-gray-400 leading-relaxed">Keep all your subjects perfectly sorted in folders, allowing you to track your daily study streaks.</p>
-            </div>
-          </div>
-        </div>
-      </section>
+    const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-      {/* How it Works (3 Steps) */}
-      <section className="py-20 px-6 border-t border-gray-800/50 bg-[#151E2E]">
-          <div className="max-w-5xl mx-auto text-center">
-             <h2 className="text-3xl md:text-5xl font-extrabold text-white mb-16 tracking-tight">
-                HazelNote keeps it <span className="text-[#10B981]">simple.</span>
-             </h2>
-             
-             <div className="flex flex-col md:flex-row justify-center items-center gap-8 md:gap-16">
-                <div className="flex flex-col items-center max-w-[220px]">
-                    <div className="w-20 h-20 bg-slate-800 rounded-3xl flex items-center justify-center mb-6 shadow-lg border border-slate-700">
-                        <FileUp className="w-10 h-10 text-emerald-400" />
-                    </div>
-                    <h3 className="font-bold text-xl text-white text-center">1. Upload</h3>
-                    <p className="text-base text-gray-400 text-center mt-3 leading-relaxed">Upload PDFs, dictate lectures, or paste YouTube URLs directly.</p>
-                </div>
-                
-                <div className="hidden md:block h-px w-24 bg-gray-700 -mt-16"></div>
-                
-                <div className="flex flex-col items-center max-w-[220px]">
-                    <div className="w-20 h-20 bg-slate-800 rounded-3xl flex items-center justify-center mb-6 shadow-lg border border-slate-700">
-                        <FileText className="w-10 h-10 text-blue-400" />
-                    </div>
-                    <h3 className="font-bold text-xl text-white text-center">2. Get Notes</h3>
-                    <p className="text-base text-gray-400 text-center mt-3 leading-relaxed">Get perfectly organized study materials structured instantly.</p>
+    const navItems = [
+        { name: 'Dashboard', path: '/dashboard', icon: '🏠' },
+        { name: 'Create Notes', path: '/dashboard/create', icon: '📝' },
+        { name: 'Exam Prep', path: '/dashboard/exam', icon: '🎓' },
+        { name: 'Profile', path: '/dashboard/profile', icon: '👤' },
+        { name: 'Support', path: '/dashboard/support', icon: '💬' },
+    ];
+
+    return (
+        <div className="flex h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200 overflow-hidden">
+            
+            {/* Mobile Sidebar Overlay */}
+            {isSidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm transition-opacity"
+                    onClick={() => setIsSidebarOpen(false)}
+                ></div>
+            )}
+
+            {/* Sidebar Navigation */}
+            <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0 transition-transform duration-300 ease-in-out flex flex-col`}>
+                <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
+                    <Link href="/dashboard" className="text-2xl font-bold text-orange-500">
+                        Hazelnote
+                    </Link>
+                    <button className="lg:hidden text-gray-500 dark:text-gray-400" onClick={toggleSidebar}>
+                        ✕
+                    </button>
                 </div>
 
-                <div className="hidden md:block h-px w-24 bg-gray-700 -mt-16"></div>
-                
-                <div className="flex flex-col items-center max-w-[220px]">
-                    <div className="w-20 h-20 bg-slate-800 rounded-3xl flex items-center justify-center mb-6 shadow-lg border border-slate-700">
-                        <CheckCircle2 className="w-10 h-10 text-purple-400" />
-                    </div>
-                    <h3 className="font-bold text-xl text-white text-center">3. Review & Ace</h3>
-                    <p className="text-base text-gray-400 text-center mt-3 leading-relaxed">Master topics with AI flashcards, quizzes, and live grading.</p>
-                </div>
-             </div>
-          </div>
-      </section>
+                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                    {navItems.map((item) => {
+                        const isActive = pathname === item.path;
+                        return (
+                            <Link key={item.name} href={item.path} onClick={() => setIsSidebarOpen(false)}>
+                                <div className={`flex items-center space-x-3 px-4 py-3 rounded-xl cursor-pointer transition-all ${isActive ? 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400 font-semibold' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-medium'}`}>
+                                    <span className="text-xl">{item.icon}</span>
+                                    <span>{item.name}</span>
+                                </div>
+                            </Link>
+                        );
+                    })}
+                </nav>
 
-      {/* Professor Hazel Card (Redesigned) */}
-      <section className="py-24 px-6 relative z-10">
-        <div className="max-w-5xl mx-auto bg-gradient-to-br from-[#0F172A] to-[#1E293B] border border-emerald-500/20 rounded-[40px] p-8 md:p-16 flex flex-col md:flex-row items-center gap-10 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full bg-emerald-500/5 blur-[100px] pointer-events-none"></div>
-            <img src="/hazelnote_tutor.png" alt="Professor Hazel" className="w-56 h-56 md:w-80 md:h-80 object-cover rounded-[32px] shadow-2xl z-10 border border-emerald-500/30" />
-            <div className="z-10 text-center md:text-left">
-                <div className="inline-flex items-center gap-2 text-emerald-400 font-bold mb-4 uppercase tracking-widest text-sm"><Bot className="w-5 h-5"/> Meet Your AI Tutor</div>
-                <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-6">Professor Hazel</h2>
-                <p className="text-gray-300 text-lg md:text-xl leading-relaxed mb-8">
-                    Got a question about your notes? Stuck on a complex topic? Professor Hazel is embedded directly into your workspace to answer questions, explain concepts simply, and test your knowledge on the fly.
-                </p>
-                <a href="/login" className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white px-6 py-3 rounded-full font-bold transition shadow-lg">
-                    Chat with Hazel <ArrowRight className="w-4 h-4"/>
-                </a>
+                <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                   <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold shadow-md">
+                          {user?.email?.charAt(0).toUpperCase() || 'U'}
+                      </div>
+                      <div className="flex-1 truncate">
+                          <p className="text-sm font-semibold truncate text-gray-800 dark:text-gray-200">{user?.email || 'Loading User...'}</p>
+                          <p className="text-xs font-bold tracking-wider text-orange-500 uppercase mt-0.5">{userTier} PLAN</p>
+                      </div>
+                   </div>
+                </div>
+            </aside>
+
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col min-w-0">
+                
+                {/* Top Navbar */}
+                <header className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center">
+                        <button 
+                            className="lg:hidden p-2 -ml-2 mr-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors"
+                            onClick={toggleSidebar}
+                        >
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div className="flex items-center space-x-4">
+                        {/* Dark Mode Toggle Button */}
+                        <button 
+                            onClick={toggleTheme}
+                            className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none transition-all duration-200 flex items-center justify-center w-10 h-10 shadow-inner"
+                            aria-label="Toggle Dark Mode"
+                            title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                        >
+                            <span className="text-lg leading-none">{isDarkMode ? '☀️' : '🌙'}</span>
+                        </button>
+                    </div>
+                </header>
+
+                {/* Main Page Content */}
+                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50/50 dark:bg-gray-900 p-4 sm:p-6 lg:p-8">
+                    <div className="max-w-7xl mx-auto w-full">
+                        {children}
+                    </div>
+                </main>
             </div>
         </div>
-      </section>
-
-      <footer className="border-t border-gray-800 py-12 px-6 bg-[#0F172A]">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-2">
-            <img src="/hazelnote_logo.png" alt="Logo" className="w-8 h-6 rounded" />
-            <span className="font-extrabold text-lg">HazelNote</span>
-          </div>
-          <div className="text-gray-500 text-sm">© 2024 free-ed. All rights reserved.</div>
-          <div className="flex gap-6">
-            <a href="/terms-of-service" className="text-sm text-gray-400 hover:text-white transition">Terms</a>
-            <a href="/privacy-policy" className="text-sm text-gray-400 hover:text-white transition">Privacy</a>
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
+    );
 }
