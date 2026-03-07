@@ -1,7 +1,6 @@
 "use client";
 import { useState } from 'react';
 import { Search, List } from 'lucide-react';
-// Exact relative path (3 levels deep)
 import { useAppContext } from '../../../context/AppContext';
 
 export default function ExamPage() {
@@ -11,7 +10,6 @@ export default function ExamPage() {
   const { tier } = useAppContext();
 
   const handleGenerate = () => {
-    // Enforce tier restrictions for question counts
     if (qCount >= 20 && tier === 'free') {
         alert(`Generating ${qCount} questions requires a Pro or Max subscription.`);
         return;
