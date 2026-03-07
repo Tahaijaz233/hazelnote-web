@@ -36,7 +36,7 @@ export default function PricingPage() {
             <div className="bg-gray-800/50 backdrop-blur-lg p-1.5 rounded-full inline-flex border border-gray-700">
               <button onClick={() => setIsAnnual(false)} className={`px-6 py-2 rounded-full font-bold text-sm transition ${!isAnnual ? 'bg-[#10B981] text-white' : 'text-gray-400 hover:text-white'}`}>Monthly</button>
               <button onClick={() => setIsAnnual(true)} className={`px-6 py-2 rounded-full font-bold text-sm transition flex items-center gap-2 ${isAnnual ? 'bg-[#10B981] text-white' : 'text-gray-400 hover:text-white'}`}>
-                Annually <span className="text-[10px] bg-green-100/20 text-green-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">-15%</span>
+                Annually <span className="text-[10px] bg-emerald-100/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">-15%</span>
               </button>
             </div>
           </div>
@@ -46,21 +46,21 @@ export default function PricingPage() {
       <section className="pb-20 px-6">
         <div className="max-w-7xl mx-auto grid md:grid-cols-3 gap-8">
           {/* FREE */}
-          <div className="pricing-card bg-gray-800/50 backdrop-blur-lg border-2 border-gray-700 rounded-3xl p-8">
+          <div className="bg-gray-800/50 backdrop-blur-lg border-2 border-gray-700 rounded-3xl p-8">
             <h3 className="text-2xl font-extrabold mb-2">Free</h3>
             <div className="mb-8 mt-4"><span className="text-5xl font-extrabold">$0</span><span className="text-gray-400">/mo</span></div>
             <a href="/login" className="block w-full py-3 px-6 text-center bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition mb-8">Get Started Free</a>
             <div className="space-y-4 text-sm md:text-base">
-              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 shrink-0" /><span className="text-gray-300">1 study set per day limit</span></div>
-              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 shrink-0" /><span className="text-gray-300">PDF upload (up to 5MB)</span></div>
-              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 shrink-0" /><span className="text-gray-300">Max 2 AI Tutor chats per set</span></div>
-              <div className="flex items-start gap-3 opacity-50"><X className="w-5 h-5 text-red-400 shrink-0" /><span className="text-gray-500">AI podcasts & Advanced limits</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-emerald-400 shrink-0" /><span className="text-gray-300">1 study set per day limit</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-emerald-400 shrink-0" /><span className="text-gray-300">PDF upload (up to 5MB)</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-emerald-400 shrink-0" /><span className="text-gray-300">Max 2 AI Tutor chats per set</span></div>
+              <div className="flex items-start gap-3 opacity-50"><X className="w-5 h-5 text-red-400 shrink-0" /><span className="text-gray-500">AI grading & Advanced limits</span></div>
             </div>
           </div>
           
           {/* PRO */}
-          <div className="pricing-card bg-gradient-to-br from-green-900/40 to-blue-900/40 backdrop-blur-lg border-2 border-green-500 rounded-3xl p-8 relative">
-            <div className="absolute -top-4 left-1/2 transform -translate-x-1/2"><span className="bg-gradient-to-r from-green-500 to-blue-500 text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg">MOST POPULAR</span></div>
+          <div className="bg-gradient-to-br from-emerald-900/40 to-blue-900/40 backdrop-blur-lg border-2 border-emerald-500 rounded-3xl p-8 relative">
+            <div className="absolute -top-4 left-1/2 transform -translate-x-1/2"><span className="bg-gradient-to-r from-emerald-500 to-blue-500 text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg">MOST POPULAR</span></div>
             <h3 className="text-2xl font-extrabold mb-2">Pro</h3>
             <div className="mb-8 mt-4">
               <span className="text-5xl font-extrabold">{isAnnual ? '$5.10' : '$6'}</span>
@@ -68,15 +68,15 @@ export default function PricingPage() {
             </div>
             <a href="/login" className="block w-full py-3 px-6 text-center bg-[#10B981] hover:bg-[#059669] text-white font-bold rounded-xl mb-8 transition">Upgrade to Pro</a>
             <div className="space-y-4 text-sm md:text-base">
-              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 shrink-0" /><span className="font-semibold">Unlimited daily study sets</span></div>
-              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 shrink-0" /><span>PDF upload (up to 50MB)</span></div>
-              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 shrink-0" /><span>Unlimited AI Tutor chats</span></div>
-              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 shrink-0" /><span>Up to 20 questions per exam</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-emerald-400 shrink-0" /><span className="font-semibold">Unlimited daily study sets</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-emerald-400 shrink-0" /><span>PDF upload (up to 50MB)</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-emerald-400 shrink-0" /><span>Unlimited AI Tutor chats</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-emerald-400 shrink-0" /><span>Up to 20 questions per exam</span></div>
             </div>
           </div>
           
           {/* MAX */}
-          <div className="pricing-card bg-gray-800/50 backdrop-blur-lg border-2 border-purple-500 rounded-3xl p-8 relative overflow-hidden">
+          <div className="bg-gray-800/50 backdrop-blur-lg border-2 border-purple-500 rounded-3xl p-8 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-4 opacity-10"><Crown className="w-24 h-24 text-purple-400" /></div>
             <h3 className="text-2xl font-extrabold mb-2">Max</h3>
             <div className="mb-8 mt-4">
