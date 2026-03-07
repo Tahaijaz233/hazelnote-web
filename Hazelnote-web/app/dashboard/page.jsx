@@ -1,7 +1,7 @@
 "use client";
 import { useState } from 'react';
 import { Mic, FileUp, Youtube, FileText, CheckCircle2, Download, Brain } from 'lucide-react';
-// Exact relative path
+// Exact relative path (2 levels deep)
 import { useAppContext } from '../../context/AppContext';
 
 export default function DashboardPage() {
@@ -17,7 +17,7 @@ export default function DashboardPage() {
 
   const triggerGenerate = () => {
     if (tier === 'free' && generationsToday >= 1) {
-        alert("You have reached your daily limit of 1 study set for the free tier. Please upgrade to Pro to generate more today!");
+        alert("You have reached your daily limit of 1 study set on the free tier. Please upgrade to Pro to generate more today!");
         return;
     }
 
@@ -34,7 +34,7 @@ export default function DashboardPage() {
     <div className="p-6 md:p-10 max-w-5xl mx-auto pt-8 md:pt-16">
       {!isGenerating ? (
         <div className="animate-slide-in">
-          {/* Coconote-Inspired Header */}
+          {/* Minimalist Header */}
           <div className="text-center mb-16">
              <h1 className="text-4xl md:text-6xl font-extrabold text-gray-900 dark:text-white mb-6 tracking-tight">
                 HazelNote keeps it <span className="text-[#10B981]">simple.</span>
