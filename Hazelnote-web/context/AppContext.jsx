@@ -5,7 +5,18 @@ import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
-const AppContext = createContext();
+// 1. Add a default state to prevent Next.js build crashes during static generation
+const defaultState = {
+    user: null,
+    isDarkMode: false,
+    toggleTheme: () => {},
+    userTier: 'free',
+    isPro: false,
+    isMax: false,
+    loading: true
+};
+
+const AppContext = createContext(defaultState);
 
 export const AppProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -84,4 +95,11 @@ export const AppProvider = ({ children }) => {
     );
 };
 
-export const useAppContext = () => useContext(AppContext);
+// 2. Add fallback logic so it NEVER returns undefined, fixing the build crash
+export const useAppContext = () => {
+    const context = useContext(AppContext);
+    if (context === undefined) {
+        return defaultState;
+    }
+    return context;
+};
