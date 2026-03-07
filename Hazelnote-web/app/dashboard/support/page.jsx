@@ -1,63 +1,40 @@
 "use client";
-import { HelpCircle, Mail, ChevronDown } from 'lucide-react';
+import { Mail, MessageCircle } from 'lucide-react';
+// Exact relative path (3 levels deep)
+import { useAppContext } from '../../../context/AppContext';
 
 export default function SupportPage() {
+  const { tier } = useAppContext();
+
   return (
-    <div className="max-w-4xl mx-auto p-8 pt-8 md:pt-12">
-      <div className="bg-white border border-gray-100 rounded-[24px] shadow-sm p-8 mb-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 bg-green-100 rounded-2xl flex items-center justify-center">
-            <HelpCircle className="w-6 h-6 text-green-600" />
+    <div className="p-6 md:p-8 max-w-4xl mx-auto pt-8 md:pt-12">
+      <header className="mb-10">
+        <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">Help & Support</h2>
+        <p className="text-gray-500 dark:text-gray-400 mt-2">Get help with your account or report an issue.</p>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-[24px] p-6 shadow-sm">
+          <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-4">
+            <Mail className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           </div>
-          <div>
-            <h1 className="text-3xl font-extrabold text-gray-900">Support & Help</h1>
-            <p className="text-gray-500">Get answers to your questions</p>
-          </div>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Email Support</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">We aim to respond to all queries within 24 hours.</p>
+          <button className="bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-800 dark:text-white px-4 py-2 rounded-lg text-sm font-bold transition">Contact Support</button>
         </div>
 
-        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 mb-8">
-          <h3 className="font-bold text-lg text-blue-900 mb-2 flex items-center gap-2">
-            <Mail className="w-5 h-5" /> Need Direct Help?
-          </h3>
-          <p className="text-blue-700 mb-3">Contact our support team and we'll get back to you within 24 hours.</p>
-          <a href="mailto:hazelnote@free-ed.site" className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition">
-            <Mail className="w-4 h-4" /> hazelnote@free-ed.site
-          </a>
-        </div>
-
-        <h2 className="text-2xl font-extrabold text-gray-900 mb-6">Frequently Asked Questions</h2>
-        <div className="space-y-4">
-          
-          <details className="group bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
-            <summary className="cursor-pointer p-5 font-bold text-gray-900 flex items-center justify-between hover:bg-gray-100 transition">
-              <span>How do I create a study set?</span>
-              <ChevronDown className="w-5 h-5 text-gray-400 group-open:rotate-180 transition" />
-            </summary>
-            <div className="px-5 pb-5 text-gray-600">
-              <p>To create a study set, simply navigate to your Workspace/Dashboard, hit "Create Notes", and choose between a PDF Upload, Voice Dictation, or pasting a YouTube URL.</p>
-            </div>
-          </details>
-
-          <details className="group bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
-            <summary className="cursor-pointer p-5 font-bold text-gray-900 flex items-center justify-between hover:bg-gray-100 transition">
-              <span>Is HazelNote actually free?</span>
-              <ChevronDown className="w-5 h-5 text-gray-400 group-open:rotate-180 transition" />
-            </summary>
-            <div className="px-5 pb-5 text-gray-600">
-              <p>Yes! Our free plan allows up to 3 study sets per month and up to 5MB PDF uploads. You can upgrade to Pro or Max at any time if you need unlimited access.</p>
-            </div>
-          </details>
-
-          <details className="group bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
-            <summary className="cursor-pointer p-5 font-bold text-gray-900 flex items-center justify-between hover:bg-gray-100 transition">
-              <span>Can I translate my notes?</span>
-              <ChevronDown className="w-5 h-5 text-gray-400 group-open:rotate-180 transition" />
-            </summary>
-            <div className="px-5 pb-5 text-gray-600">
-              <p>Yes. After generating your notes, you can use the Translate button available in the study view to convert the summary or the entire document into multiple languages instantly.</p>
-            </div>
-          </details>
-
+        <div className="bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-[24px] p-6 shadow-sm relative overflow-hidden">
+          {tier !== 'max' && (
+              <div className="absolute top-4 right-4 text-[10px] bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1 rounded-full font-bold">Max Tier</div>
+          )}
+          <div className="w-12 h-12 bg-purple-50 dark:bg-purple-900/30 rounded-xl flex items-center justify-center mb-4">
+            <MessageCircle className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Priority Live Chat</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Instant access to our support team for Max users.</p>
+          <button className={`px-4 py-2 rounded-lg text-sm font-bold transition ${tier === 'max' ? 'bg-[#10B981] hover:bg-[#059669] text-white' : 'bg-gray-100 dark:bg-slate-700 text-gray-400 cursor-not-allowed'}`}>
+            {tier === 'max' ? 'Start Chat' : 'Upgrade to Access'}
+          </button>
         </div>
       </div>
     </div>
