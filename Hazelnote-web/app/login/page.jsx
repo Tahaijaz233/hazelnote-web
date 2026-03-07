@@ -1,5 +1,7 @@
 "use client";
 import { useState } from 'react';
+import { signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 
 export default function LoginPage() {
   const [activeTab, setActiveTab] = useState('in');
@@ -12,11 +14,18 @@ export default function LoginPage() {
 
   const handleSignIn = (e) => {
     e.preventDefault();
-    showAlert("Authentication logic will be connected here!", "ok");
+    showAlert("Email auth is currently disabled, use Google Login.", "error");
   };
 
-  const handleGoogleSignIn = () => {
-    showAlert("Redirecting to Google Sign-In...", "ok");
+  const handleGoogleSignIn = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+        await signInWithPopup(auth, provider);
+        // Successful login, redirect to dashboard
+        window.location.href = '/dashboard';
+    } catch (error) {
+        showAlert(error.message, "error");
+    }
   };
 
   return (
