@@ -1,109 +1,154 @@
 'use client';
 
-import React, { useState } from 'react';
-import Link from 'next/link';
+import React from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { usePathname } from 'next/navigation';
+import Link from 'next/link';
 
-export default function DashboardLayout({ children }) {
-    const { isDarkMode, toggleTheme, user, isPro, isMax, userTier } = useAppContext();
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const pathname = usePathname();
+export default function DashboardPage() {
+    const { user, isPro, isMax, userTier, loading } = useAppContext();
 
-    const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
-
-    const navItems = [
-        { name: 'Dashboard', path: '/dashboard', icon: '🏠' },
-        { name: 'Create Notes', path: '/dashboard/create', icon: '📝' },
-        { name: 'Exam Prep', path: '/dashboard/exam', icon: '🎓' },
-        { name: 'Profile', path: '/dashboard/profile', icon: '👤' },
-        { name: 'Support', path: '/dashboard/support', icon: '💬' },
-    ];
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-full min-h-[60vh]">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500"></div>
+            </div>
+        );
+    }
 
     return (
-        <div className="flex h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-200 overflow-hidden">
-            
-            {/* Mobile Sidebar Overlay */}
-            {isSidebarOpen && (
-                <div 
-                    className="fixed inset-0 bg-black/50 z-20 lg:hidden backdrop-blur-sm transition-opacity"
-                    onClick={() => setIsSidebarOpen(false)}
-                ></div>
-            )}
-
-            {/* Sidebar Navigation */}
-            <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:inset-0 transition-transform duration-300 ease-in-out flex flex-col`}>
-                <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
-                    <Link href="/dashboard" className="text-2xl font-bold text-orange-500">
-                        Hazelnote
-                    </Link>
-                    <button className="lg:hidden text-gray-500 dark:text-gray-400" onClick={toggleSidebar}>
-                        ✕
+        <div className="space-y-8 animate-fade-in">
+            {/* Header Section */}
+            <div className="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                        Welcome back, {user?.email ? user.email.split('@')[0] : 'Student'}! 👋
+                    </h1>
+                    <p className="text-gray-500 dark:text-gray-400 mt-2 text-lg">
+                        Ready to ace your next exam? Here is an overview of your progress.
+                    </p>
+                </div>
+                <Link href="/dashboard/create">
+                    <button className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-semibold shadow-md transition-all transform hover:scale-105 flex items-center space-x-2">
+                        <span>➕ Create New Note</span>
                     </button>
+                </Link>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 transition-transform hover:-translate-y-1">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-gray-500 dark:text-gray-400 font-medium">Study Materials</h3>
+                        <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xl">
+                            📚
+                        </div>
+                    </div>
+                    <p className="text-3xl font-bold text-gray-900 dark:text-white mt-4">0</p>
+                    <p className="text-sm text-gray-400 mt-1">Generated Notes</p>
                 </div>
 
-                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                    {navItems.map((item) => {
-                        const isActive = pathname === item.path;
-                        return (
-                            <Link key={item.name} href={item.path} onClick={() => setIsSidebarOpen(false)}>
-                                <div className={`flex items-center space-x-3 px-4 py-3 rounded-xl cursor-pointer transition-all ${isActive ? 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400 font-semibold' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 font-medium'}`}>
-                                    <span className="text-xl">{item.icon}</span>
-                                    <span>{item.name}</span>
-                                </div>
-                            </Link>
-                        );
-                    })}
-                </nav>
-
-                <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
-                   <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold shadow-md">
-                          {user?.email?.charAt(0).toUpperCase() || 'U'}
-                      </div>
-                      <div className="flex-1 truncate">
-                          <p className="text-sm font-semibold truncate text-gray-800 dark:text-gray-200">{user?.email || 'Loading User...'}</p>
-                          <p className="text-xs font-bold tracking-wider text-orange-500 uppercase mt-0.5">{userTier} PLAN</p>
-                      </div>
-                   </div>
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 transition-transform hover:-translate-y-1">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-gray-500 dark:text-gray-400 font-medium">Exam Prep</h3>
+                        <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center justify-center text-xl">
+                            🎓
+                        </div>
+                    </div>
+                    <p className="text-3xl font-bold text-gray-900 dark:text-white mt-4">0</p>
+                    <p className="text-sm text-gray-400 mt-1">Practice Tests Taken</p>
                 </div>
-            </aside>
 
-            {/* Main Content Area */}
-            <div className="flex-1 flex flex-col min-w-0">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 transition-transform hover:-translate-y-1">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-gray-500 dark:text-gray-400 font-medium">Subscription</h3>
+                        <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex items-center justify-center text-xl">
+                            ⭐
+                        </div>
+                    </div>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-4 uppercase tracking-wide">
+                        {userTier} PLAN
+                    </p>
+                    {(!isPro && !isMax) ? (
+                        <Link href="/pricing" className="text-sm text-orange-500 font-medium hover:text-orange-600 mt-2 inline-flex items-center">
+                            Upgrade for Unlimited <span className="ml-1">&rarr;</span>
+                        </Link>
+                    ) : (
+                        <p className="text-sm text-green-500 font-medium mt-2">Active ✨</p>
+                    )}
+                </div>
+            </div>
+
+            {/* Main Content Area: Recent Activity & Quick Links */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 
-                {/* Top Navbar */}
-                <header className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center">
-                        <button 
-                            className="lg:hidden p-2 -ml-2 mr-2 rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors"
-                            onClick={toggleSidebar}
-                        >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
-                        </button>
+                {/* Left Column: Recent Notes */}
+                <div className="xl:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">Recent Documents</h2>
+                        <Link href="/dashboard/create" className="text-sm font-semibold text-orange-500 hover:text-orange-600 transition-colors">
+                            View All
+                        </Link>
                     </div>
                     
-                    <div className="flex items-center space-x-4">
-                        {/* Dark Mode Toggle Button */}
-                        <button 
-                            onClick={toggleTheme}
-                            className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none transition-all duration-200 flex items-center justify-center w-10 h-10 shadow-inner"
-                            aria-label="Toggle Dark Mode"
-                            title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-                        >
-                            <span className="text-lg leading-none">{isDarkMode ? '☀️' : '🌙'}</span>
-                        </button>
+                    {/* Empty State */}
+                    <div className="flex flex-col items-center justify-center py-12 px-4 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/50">
+                        <div className="text-5xl mb-4 opacity-80">📄</div>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">No notes generated yet</h3>
+                        <p className="text-gray-500 dark:text-gray-400 text-center max-w-sm mb-6">
+                            Start learning faster by uploading a PDF or pasting a YouTube link. Hazelnote will summarize it instantly.
+                        </p>
+                        <Link href="/dashboard/create">
+                            <button className="bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 px-5 py-2.5 rounded-lg font-medium transition-colors shadow-sm">
+                                Create your first note
+                            </button>
+                        </Link>
                     </div>
-                </header>
+                </div>
 
-                {/* Main Page Content */}
-                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50/50 dark:bg-gray-900 p-4 sm:p-6 lg:p-8">
-                    <div className="max-w-7xl mx-auto w-full">
-                        {children}
+                {/* Right Column: Quick Links */}
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Quick Links</h2>
+                    <div className="space-y-4">
+                        <Link href="/dashboard/create" className="group flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 hover:bg-orange-50 dark:hover:bg-gray-700 transition-all border border-transparent hover:border-orange-100 dark:hover:border-gray-600">
+                            <div className="flex items-center space-x-4">
+                                <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 flex items-center justify-center">
+                                    🎥
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 dark:text-white">Video to Notes</h4>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Summarize YouTube links</p>
+                                </div>
+                            </div>
+                            <span className="text-gray-400 group-hover:text-orange-500 transition-colors transform group-hover:translate-x-1">&rarr;</span>
+                        </Link>
+
+                        <Link href="/dashboard/exam" className="group flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 hover:bg-blue-50 dark:hover:bg-gray-700 transition-all border border-transparent hover:border-blue-100 dark:hover:border-gray-600">
+                            <div className="flex items-center space-x-4">
+                                <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                                    📝
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 dark:text-white">Practice Exam</h4>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Test your knowledge</p>
+                                </div>
+                            </div>
+                            <span className="text-gray-400 group-hover:text-blue-500 transition-colors transform group-hover:translate-x-1">&rarr;</span>
+                        </Link>
+
+                        <Link href="/dashboard/support" className="group flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 hover:bg-green-50 dark:hover:bg-gray-700 transition-all border border-transparent hover:border-green-100 dark:hover:border-gray-600">
+                            <div className="flex items-center space-x-4">
+                                <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 flex items-center justify-center">
+                                    🎧
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-gray-900 dark:text-white">Help & Support</h4>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Talk to our team</p>
+                                </div>
+                            </div>
+                            <span className="text-gray-400 group-hover:text-green-500 transition-colors transform group-hover:translate-x-1">&rarr;</span>
+                        </Link>
                     </div>
-                </main>
+                </div>
             </div>
         </div>
     );
