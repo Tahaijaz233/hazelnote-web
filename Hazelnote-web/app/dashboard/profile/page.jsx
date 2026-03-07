@@ -1,9 +1,10 @@
 "use client";
 import { Activity, Settings, CreditCard, AlertTriangle, LogOut, Trash2 } from 'lucide-react';
-import { useAppContext } from '@/context/AppContext';
+// Exact relative path (3 levels deep)
+import { useAppContext } from '../../../context/AppContext';
 
 export default function ProfilePage() {
-  const { isDarkMode, setIsDarkMode, generationsToday } = useAppContext();
+  const { isDarkMode, setIsDarkMode, generationsToday, tier } = useAppContext();
 
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto pt-8 md:pt-12">
@@ -23,10 +24,10 @@ export default function ProfilePage() {
           <h3 className="text-xl font-bold mb-4 border-b border-gray-100 dark:border-slate-700 pb-2 flex items-center gap-2 dark:text-white"><Activity className="w-5 h-5 text-blue-500" /> Usage Statistics</h3>
           <div className="mb-2 flex justify-between text-sm font-bold text-gray-700 dark:text-gray-300">
             <span>Daily Generations Used</span>
-            <span>{generationsToday} / 1</span>
+            <span>{generationsToday} / {tier === 'free' ? '1' : 'Unlimited'}</span>
           </div>
           <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3 mb-2 overflow-hidden shadow-inner">
-            <div className="bg-green-500 h-3 rounded-full transition-all" style={{ width: `${(generationsToday / 1) * 100}%` }}></div>
+            <div className="bg-green-500 h-3 rounded-full transition-all" style={{ width: tier === 'free' ? `${(generationsToday / 1) * 100}%` : '5%' }}></div>
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400">Free tier allows 1 generated study set per day.</p>
         </div>
@@ -39,12 +40,12 @@ export default function ProfilePage() {
                 <h4 className="font-bold text-gray-900 dark:text-white">Dark Mode</h4>
                 <p className="text-xs text-gray-500 dark:text-gray-400">Toggle dark theme across the workspace</p>
             </div>
-            {/* Fully responsive and smaller Tailwind Toggle */}
+            {/* Shrunk and Optimized Dark Mode Toggle */}
             <button 
                 onClick={() => setIsDarkMode(!isDarkMode)} 
-                className={`w-11 h-6 rounded-full relative transition duration-300 flex items-center shrink-0 cursor-pointer shadow-inner border border-black/10 ${isDarkMode ? 'bg-[#10B981]' : 'bg-gray-200'}`}
+                className={`w-10 h-5 rounded-full relative transition-colors duration-300 flex items-center shrink-0 cursor-pointer shadow-inner ${isDarkMode ? 'bg-[#10B981]' : 'bg-gray-300'}`}
             >
-                <span className={`w-4 h-4 bg-white rounded-full absolute transition-transform duration-300 shadow-md ${isDarkMode ? 'translate-x-6' : 'translate-x-1'}`}></span>
+                <span className={`w-4 h-4 bg-white rounded-full absolute left-0.5 transition-transform duration-300 shadow-md ${isDarkMode ? 'translate-x-5' : 'translate-x-0'}`}></span>
             </button>
           </div>
         </div>
