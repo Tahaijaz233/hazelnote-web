@@ -62,26 +62,6 @@ hazelnote/
 └── next-env.d.ts
 ```
 
-## Environment Variables
-
-Create a `.env.local` file in the root directory with the following variables:
-
-```env
-# Firebase Configuration
-NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyASWr6KPOajE6gis-kWkCCTDNmq3GvEyV4
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=hazelnoteai.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=hazelnoteai
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=hazelnoteai.firebasestorage.app
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=892121963498
-NEXT_PUBLIC_FIREBASE_APP_ID=1:892121963498:web:f73a471bfce70f663c3093
-
-# Gemini API (for server-side API route)
-GEMINI_API_KEY=AIzaSyDQE66DWouG-T3qf3BhjQSEPgxbMMCzljk
-
-# YouTube Transcript API
-YOUTUBE_TRANSCRIPT_API_KEY=699abba587c753810a860b6d
-```
-
 ## Getting Started
 
 ### 1. Install Dependencies
