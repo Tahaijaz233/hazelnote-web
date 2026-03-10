@@ -30,6 +30,7 @@ export default function Pricing() {
               <img src="/hazelnote_logo.png" alt="HazelNote" className="w-10 h-7 object-fill rounded-lg" />
               <div className="flex flex-col justify-center">
                 <span className="text-xl font-extrabold text-white leading-none">HazelNote</span>
+                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">by free-ed</span>
               </div>
             </Link>
             <div className="flex items-center gap-6">
@@ -85,8 +86,8 @@ export default function Pricing() {
               <div className="mb-8 mt-4"><span className="text-5xl font-extrabold text-white">$0</span><span className="text-gray-400">/mo</span></div>
               <Link href="/login/" className="block w-full py-3 px-6 text-center bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition mb-8">Get Started Free</Link>
               <div className="space-y-4">
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">1 study set per month</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">PDF upload (up to 5MB)</span></div>
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">2 study sets per month</span></div>
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">PDF upload (up to 10MB)</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">Max 3 AI Tutor chats per set</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">Standard Flashcards & Quizzes</span></div>
               </div>
@@ -107,6 +108,8 @@ export default function Pricing() {
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Unlimited AI Tutor chats</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">AI Podcasts & Translation</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Up to 30 Exam Questions</span></div>
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Advanced Note Editing</span></div>
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Sync Across Devices</span></div>
               </div>
             </div>
           </div>
