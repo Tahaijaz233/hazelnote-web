@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -29,26 +29,21 @@ import {
   Play,
   Square,
   Headphones,
-  ChevronDown,
   Bold,
   Italic,
   Underline,
   Type,
-  Palette,
-  Highlighter,
   Image as ImageIcon,
   Table,
   FunctionSquare,
   MessageSquare,
   Save,
   RefreshCw,
-  Monitor,
-  Phone,
 } from 'lucide-react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { auth, db, storage } from '@/lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+// NOTE: Firebase Storage imports have been COMPLETELY REMOVED!
+import { auth, db } from '@/lib/firebase';
 import { StudySet, UserStats } from '@/types';
 import { safeParseJSON, saveToStorage, renderMarkdownWithMath, getCurrentMonth } from '@/lib/utils';
 
@@ -168,9 +163,7 @@ export default function Dashboard() {
   const [currentTab, setCurrentTab] = useState<'notes' | 'flashcards' | 'quiz' | 'podcast'>('notes');
   const [inputMode, setInputMode] = useState<'pdf' | 'voice' | 'link'>('pdf');
   
-  // State changes: Store raw File objects
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
-  const [webText, setWebText] = useState('');
   const [voiceText, setVoiceText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -187,8 +180,6 @@ export default function Dashboard() {
   
   // Podcast state
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentUtterance, setCurrentUtterance] = useState<SpeechSynthesisUtterance | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   
   // Pro note editing state
   const [fontSize, setFontSize] = useState(16);
@@ -202,19 +193,16 @@ export default function Dashboard() {
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
   const [goProModalOpen, setGoProModalOpen] = useState(false);
 
-  // Loading tips
   const loadingTips = [
-    'Uploading files to secure storage...',
-    'Analyzing document structure...',
+    'Extracting text locally in your browser...',
+    'Synthesizing documents into study notes...',
     'Extracting key concepts & definitions...',
     'Formatting Markdown tables...',
     'Formulating intelligent practice questions...',
     'Structuring audio podcast script...',
     'Finalizing study workspace...',
-    'Cleaning up temporary storage...',
   ];
 
-  // Initialize
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
@@ -299,7 +287,6 @@ export default function Dashboard() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Size limit based on tier
     const maxMB = tier === 'pro' ? 100 : 10;
     const newFiles: File[] = [];
 
@@ -318,12 +305,8 @@ export default function Dashboard() {
     setPdfFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const callLLM = async (systemPrompt: string, userText: string, pdfUrls?: string[]) => {
+  const callLLM = async (systemPrompt: string, userText: string) => {
     const payload: any = { systemPrompt, userText };
-
-    if (pdfUrls && pdfUrls.length > 0) {
-      payload.pdfUrls = pdfUrls;
-    }
 
     const res = await fetch('/api/gemini/', {
       method: 'POST',
@@ -350,6 +333,41 @@ export default function Dashboard() {
     return data.result;
   };
 
+  // 🌟 NEW: Client-side PDF extraction function
+  const extractTextFromPDF = async (file: File): Promise<string> => {
+    try {
+      // Dynamically load PDF.js script to avoid SSR Next.js issues
+      if (!(window as any)['pdfjs-dist/build/pdf']) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+          script.onload = () => resolve(true);
+          script.onerror = reject;
+          document.body.appendChild(script);
+        });
+      }
+
+      const pdfjsLib = (window as any)['pdfjs-dist/build/pdf'];
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map((item: any) => item.str).join(' ');
+        fullText += pageText + '\n';
+      }
+      
+      return fullText;
+    } catch (error) {
+      console.error("Failed to extract PDF text:", error);
+      throw new Error(`Could not read text from ${file.name}. Ensure it's a valid, readable PDF.`);
+    }
+  };
+
   const generateStudySet = async () => {
     if (tier === 'free') {
       const month = getCurrentMonth();
@@ -361,8 +379,6 @@ export default function Dashboard() {
     }
 
     let finalContext = '';
-    let uploadedRefs: any[] = [];
-    let uploadedUrls: string[] = [];
     
     // Initial validation
     if (inputMode === 'link') {
@@ -392,9 +408,9 @@ export default function Dashboard() {
     }, 3000);
 
     try {
-      // Input Logic Phase
+      // 🌟 NEW: Input Logic Phase (No Firebase Storage Used)
       if (inputMode === 'link') {
-        setLoadingTip('Fetching YouTube transcript...');
+        setLoadingTip('Fetching YouTube transcript directly...');
         const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
         const ytRes = await fetch('/api/youtube/', {
           method: 'POST',
@@ -406,14 +422,11 @@ export default function Dashboard() {
         finalContext += '\n' + ytData.text;
       } 
       else if (inputMode === 'pdf') {
-        setLoadingTip('Uploading documents to secure storage...');
+        setLoadingTip('Extracting text locally in your browser...');
         for (const file of pdfFiles) {
-          const storageRef = ref(storage, `temp_uploads/${user?.uid || 'guest'}/${Date.now()}_${file.name}`);
-          await uploadBytes(storageRef, file);
-          const url = await getDownloadURL(storageRef);
-          uploadedRefs.push(storageRef);
-          uploadedUrls.push(url);
-          finalContext += `\n[Attached Document: ${file.name}]\n`;
+          finalContext += `\n--- Content from ${file.name} ---\n`;
+          const extractedText = await extractTextFromPDF(file);
+          finalContext += extractedText + '\n';
         }
       }
 
@@ -454,7 +467,13 @@ ANSWER: [A/B/C/D]
 Ensure you output EXACTLY 5 parts using "===SPLIT===" as the separator.`;
 
       setLoadingTip('Synthesizing study set via Gemini AI...');
-      const mainResult = await callLLM(mainPrompt, finalContext, uploadedUrls);
+      
+      // Limit text context size to prevent exceeding API limits (Gemini handles large contexts well, but truncation is safe)
+      const safeContext = finalContext.substring(0, 150000); 
+
+      // Notice: We NO LONGER pass pdfUrls. We only pass the extracted raw text string!
+      const mainResult = await callLLM(mainPrompt, safeContext);
+      
       let parts = mainResult.split('===SPLIT===').map((p: string) => p.trim());
       while (parts.length < 5) {
         parts.push('Content generation incomplete. Please regenerate.');
@@ -472,7 +491,7 @@ IMPORTANT RULES:
 - NO asterisks, brackets, or special characters
 - Just plain text that can be read aloud naturally
 
-Content: ${parts[1] || finalContext.substring(0, 3000)}`;
+Content: ${parts[1] || safeContext.substring(0, 3000)}`;
       
       const podResult = await callLLM(podPrompt, '');
       const cleanPodResult = podResult
@@ -527,17 +546,6 @@ Content: ${parts[1] || finalContext.substring(0, 3000)}`;
       clearInterval(tipInterval);
       setIsLoading(false);
       alert('Error: ' + e.message);
-    } finally {
-      // CLEANUP: Always delete the temporary storage files after generation is done
-      if (uploadedRefs.length > 0) {
-        for (const storageRef of uploadedRefs) {
-          try {
-            await deleteObject(storageRef);
-          } catch (e) {
-            console.warn('Failed to clean up temporary Firebase storage file', e);
-          }
-        }
-      }
     }
   };
 
@@ -958,8 +966,8 @@ ${context}`;
             {inputMode === 'pdf' && (
               <div className="glass-card p-8 md:p-12 text-center border-2 border-dashed border-gray-600 bg-gray-800/50 backdrop-blur-lg">
                 <FileText className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-                <h3 className="text-xl font-bold mb-2 text-white">Upload Multiple PDFs</h3>
-                <p className="text-gray-400 mb-8 max-w-sm mx-auto">Upload documents to be processed by Gemini AI. Limit: {tier === 'pro' ? '100MB' : '10MB'} per file.</p>
+                <h3 className="text-xl font-bold mb-2 text-white">Extract PDF without Uploading</h3>
+                <p className="text-gray-400 mb-8 max-w-sm mx-auto">Your files are processed directly on your device. We extract the text locally—no file is saved to any storage backend!</p>
                 <input type="file" id="pdf-upload" multiple accept=".pdf" className="hidden" onChange={handlePDFUpload} />
                 <label htmlFor="pdf-upload" className="btn-primary px-10 py-4 cursor-pointer inline-block shadow-lg text-lg">Browse Files</label>
                 <div className="mt-8 flex flex-wrap gap-2 justify-center">
@@ -984,7 +992,7 @@ ${context}`;
                 <div className="flex flex-col gap-3 mb-4">
                   <input type="text" id="youtube-url-input" className="flex-1 border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 bg-gray-700 text-white text-sm font-medium" placeholder="Paste a YouTube URL here..." />
                 </div>
-                <p className="text-sm text-gray-400 mb-4">Enter a YouTube URL and click Generate to automatically fetch the transcript and create a study set.</p>
+                <p className="text-sm text-gray-400 mb-4">We simply extract the transcript (closed captions) as pure text and send it to our AI. The video file is never downloaded!</p>
               </div>
             )}
 
