@@ -24,7 +24,7 @@ export default function Support() {
     },
     {
       question: 'Is HazelNote actually free?',
-      answer: 'Yes! Our free plan allows up to 1 study set per month and up to 5MB PDF uploads. You can upgrade to Pro at any time if you need unlimited access and advanced AI features.',
+      answer: 'Yes! Our free plan allows up to 2 study sets per month and up to 10MB PDF uploads. You can upgrade to Pro at any time if you need unlimited access and advanced AI features.',
     },
     {
       question: 'Can I translate my notes?',
@@ -85,7 +85,16 @@ export default function Support() {
 
       <Sidebar />
 
-      <main className="flex-1 h-full overflow-y-auto bg-gray-50 dark:bg-slate-900">
+      <main className="flex-1 h-full overflow-y-auto bg-gray-50 dark:bg-slate-900 relative">
+        {/* Desktop hamburger menu button */}
+        <button 
+          onClick={() => setSidebarOpen(true)} 
+          className="hidden md:flex fixed top-4 left-4 z-30 p-2 bg-gray-800/80 backdrop-blur border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition items-center gap-2"
+        >
+          <Menu className="w-5 h-5" />
+          <span className="text-sm font-medium">Menu</span>
+        </button>
+
         {/* Mobile header */}
         <div className="md:hidden bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-3 sticky top-0 z-30">
           <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
