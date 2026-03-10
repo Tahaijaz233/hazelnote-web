@@ -65,6 +65,7 @@ export default function Home() {
               <img src="/hazelnote_logo.png" alt="HazelNote" className="w-10 h-7 object-fill rounded-lg" />
               <div className="flex flex-col justify-center">
                 <span className="text-xl font-extrabold text-white leading-none">HazelNote</span>
+                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">by free-ed</span>
               </div>
             </Link>
             <div className="flex items-center gap-6">
@@ -105,10 +106,10 @@ export default function Home() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center px-4">
             <Link
-              href="/login/"
+              href={isLoggedIn ? "/dashboard/" : "/login/"}
               className="px-8 py-4 btn-primary text-white font-bold rounded-full text-lg flex items-center justify-center gap-2 animate-pulse-glow"
             >
-              Start Learning Free <ArrowRight className="w-5 h-5" />
+              {isLoggedIn ? 'Dashboard' : 'Start Learning Free'} <ArrowRight className="w-5 h-5" />
             </Link>
             <Link
               href="/dashboard/"
