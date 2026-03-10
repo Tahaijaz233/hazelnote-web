@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -18,7 +18,6 @@ import {
   Mic,
   Link as LinkIcon,
   FileText,
-  Download,
   Loader2,
   ArrowLeft,
   Printer,
@@ -31,18 +30,139 @@ import {
   Square,
   Headphones,
   ChevronDown,
+  Bold,
+  Italic,
+  Underline,
+  Type,
+  Palette,
+  Highlighter,
+  Image as ImageIcon,
+  Table,
+  FunctionSquare,
+  MessageSquare,
+  Save,
+  RefreshCw,
+  Monitor,
+  Phone,
 } from 'lucide-react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { StudySet, PDFFile, UserStats } from '@/types';
 import { safeParseJSON, saveToStorage, renderMarkdownWithMath, getCurrentMonth } from '@/lib/utils';
+
+// Note editor toolbar component for Pro users
+const NoteEditorToolbar = ({ 
+  onFormat, 
+  onInsertMath, 
+  onInsertImage, 
+  onInsertTable, 
+  onAddComment,
+  fontSize,
+  setFontSize,
+  fontColor,
+  setFontColor,
+  highlightColor,
+  setHighlightColor,
+}: {
+  onFormat: (format: string) => void;
+  onInsertMath: () => void;
+  onInsertImage: () => void;
+  onInsertTable: () => void;
+  onAddComment: () => void;
+  fontSize: number;
+  setFontSize: (size: number) => void;
+  fontColor: string;
+  setFontColor: (color: string) => void;
+  highlightColor: string;
+  setHighlightColor: (color: string) => void;
+}) => {
+  const colors = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFA500', '#800080', '#FFC0CB'];
+  const highlightColors = ['transparent', '#FFFF00', '#00FFFF', '#FF00FF', '#90EE90', '#FFB6C1'];
+
+  return (
+    <div className="sticky top-0 z-20 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-sm">
+      <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
+        <select 
+          value={fontSize} 
+          onChange={(e) => setFontSize(Number(e.target.value))}
+          className="text-sm border border-gray-200 dark:border-gray-600 rounded px-2 py-1 bg-gray-50 dark:bg-gray-700 dark:text-white"
+        >
+          <option value={12}>12px</option>
+          <option value={14}>14px</option>
+          <option value={16}>16px</option>
+          <option value={18}>18px</option>
+          <option value={20}>20px</option>
+          <option value={24}>24px</option>
+        </select>
+      </div>
+      
+      <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
+        <button onClick={() => onFormat('bold')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Bold">
+          <Bold className="w-4 h-4" />
+        </button>
+        <button onClick={() => onFormat('italic')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Italic">
+          <Italic className="w-4 h-4" />
+        </button>
+        <button onClick={() => onFormat('underline')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Underline">
+          <Underline className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
+        <span className="text-xs text-gray-500">Color:</span>
+        <div className="flex gap-1">
+          {colors.map(c => (
+            <button
+              key={c}
+              onClick={() => setFontColor(c)}
+              className={`w-5 h-5 rounded-full border ${fontColor === c ? 'ring-2 ring-offset-1 ring-blue-500' : ''}`}
+              style={{ backgroundColor: c }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
+        <span className="text-xs text-gray-500">Highlight:</span>
+        <div className="flex gap-1">
+          {highlightColors.map(c => (
+            <button
+              key={c}
+              onClick={() => setHighlightColor(c)}
+              className={`w-5 h-5 rounded-full border ${highlightColor === c ? 'ring-2 ring-offset-1 ring-blue-500' : ''} ${c === 'transparent' ? 'bg-gray-200' : ''}`}
+              style={{ backgroundColor: c === 'transparent' ? 'transparent' : c }}
+            >
+              {c === 'transparent' && <span className="text-xs">✕</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <button onClick={onInsertMath} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm" title="Insert Math">
+          <FunctionSquare className="w-4 h-4" /> Math
+        </button>
+        <button onClick={onInsertImage} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm" title="Insert Image">
+          <ImageIcon className="w-4 h-4" /> Image
+        </button>
+        <button onClick={onInsertTable} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm" title="Insert Table">
+          <Table className="w-4 h-4" /> Table
+        </button>
+        <button onClick={onAddComment} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm" title="Add Comment">
+          <MessageSquare className="w-4 h-4" /> Comment
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'create' | 'study'>('dashboard');
   const [currentTab, setCurrentTab] = useState<'notes' | 'flashcards' | 'quiz' | 'podcast'>('notes');
   const [inputMode, setInputMode] = useState<'pdf' | 'voice' | 'link'>('pdf');
@@ -63,6 +183,19 @@ export default function Dashboard() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
   const [chatInput, setChatInput] = useState('');
+  
+  // Podcast state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentUtterance, setCurrentUtterance] = useState<SpeechSynthesisUtterance | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Pro note editing state
+  const [fontSize, setFontSize] = useState(16);
+  const [fontColor, setFontColor] = useState('#000000');
+  const [highlightColor, setHighlightColor] = useState('transparent');
+  const [editedNotes, setEditedNotes] = useState<string>('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('offline');
   
   // Modals
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
@@ -91,6 +224,11 @@ export default function Dashboard() {
           const p = snap.data();
           setProfile(p);
           setTier(p.is_pro ? 'pro' : 'free');
+          
+          // For pro users, sync from Firebase
+          if (p.is_pro) {
+            syncFromFirebase(u.uid);
+          }
         }
       }
     });
@@ -101,6 +239,55 @@ export default function Dashboard() {
 
     return () => unsubscribe();
   }, []);
+
+  // Sync from Firebase for pro users
+  const syncFromFirebase = async (userId: string) => {
+    try {
+      setSyncStatus('syncing');
+      const studySetsRef = collection(db, 'studySets');
+      const q = query(studySetsRef, where('userId', '==', userId));
+      const querySnapshot = await getDocs(q);
+      
+      const firebaseSets: StudySet[] = [];
+      querySnapshot.forEach((doc) => {
+        firebaseSets.push(doc.data() as StudySet);
+      });
+      
+      if (firebaseSets.length > 0) {
+        // Merge with local storage, preferring Firebase data
+        const localSets = safeParseJSON('hz_study_history', []);
+        const mergedSets = [...firebaseSets, ...localSets.filter((ls: StudySet) => 
+          !firebaseSets.some((fs: StudySet) => fs.id === ls.id)
+        )].slice(0, 50);
+        
+        setStudyHistory(mergedSets);
+        saveToStorage('hz_study_history', mergedSets);
+      }
+      setSyncStatus('synced');
+    } catch (e) {
+      console.error('Sync failed:', e);
+      setSyncStatus('offline');
+    }
+  };
+
+  // Sync to Firebase for pro users
+  const syncToFirebase = async (studySet: StudySet) => {
+    if (!user || tier !== 'pro') return;
+    
+    try {
+      setSyncStatus('syncing');
+      const studySetRef = doc(db, 'studySets', `${user.uid}_${studySet.id}`);
+      await setDoc(studySetRef, {
+        ...studySet,
+        userId: user.uid,
+        syncedAt: serverTimestamp(),
+      });
+      setSyncStatus('synced');
+    } catch (e) {
+      console.error('Sync to Firebase failed:', e);
+      setSyncStatus('offline');
+    }
+  };
 
   // Check streak
   useEffect(() => {
@@ -118,7 +305,7 @@ export default function Dashboard() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    const maxMB = tier === 'free' ? 5 : 500;
+    const maxMB = tier === 'free' ? 10 : 500;
     const newFiles: PDFFile[] = [];
 
     for (const file of files) {
@@ -141,60 +328,6 @@ export default function Dashboard() {
 
   const removePDF = (index: number) => {
     setPdfFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const fetchYouTubeContent = async () => {
-    const urlInput = document.getElementById('web-url-input') as HTMLInputElement;
-    let url = urlInput?.value?.trim();
-    
-    if (!url) {
-      alert('Please enter a valid URL.');
-      return;
-    }
-
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'https://' + url;
-      urlInput.value = url;
-    }
-
-    const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
-    const statusEl = document.getElementById('fetch-status-msg');
-    const btn = document.getElementById('web-fetch-btn') as HTMLButtonElement;
-
-    if (statusEl) {
-      statusEl.classList.remove('hidden');
-      statusEl.textContent = 'Extracting...';
-      statusEl.className = 'text-sm font-medium text-center mb-3 text-blue-500';
-    }
-    if (btn) btn.disabled = true;
-
-    try {
-      const endpoint = isYouTube ? '/api/youtube/' : '/api/scrape/';
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch content.');
-      }
-
-      setWebText(data.text || '');
-      if (statusEl) {
-        statusEl.textContent = `✅ Successfully extracted text from ${data.source}!`;
-        statusEl.className = 'text-sm font-medium text-center mb-3 text-green-500';
-      }
-    } catch (error: any) {
-      if (statusEl) {
-        statusEl.textContent = `❌ Error: ${error.message}`;
-        statusEl.className = 'text-sm font-medium text-center mb-3 text-red-500';
-      }
-    } finally {
-      if (btn) btn.disabled = false;
-    }
   };
 
   const callLLM = async (systemPrompt: string, userText: string, files?: PDFFile[]) => {
@@ -227,11 +360,11 @@ export default function Dashboard() {
   };
 
   const generateStudySet = async () => {
-    // Check free tier limit
+    // Check free tier limit - now 2 per month
     if (tier === 'free') {
       const month = getCurrentMonth();
       const count = stats.monthlySets[month] || 0;
-      if (count >= 1) {
+      if (count >= 2) {
         setGoProModalOpen(true);
         return;
       }
@@ -275,6 +408,7 @@ export default function Dashboard() {
 CRITICAL FORMATTING RULES:
 - Output ONLY the raw requested text for each section. 
 - NO conversational filler.
+- For math notation, use LaTeX format: inline math with $formula$ and block math with $$formula$$
 
 Section 1: Write a SHORT TITLE (4-8 words max) summarizing the specific topic.
 ===SPLIT===
@@ -284,15 +418,17 @@ Section 3: Write DETAILED NOTES in Markdown format.
    - Use ## for main sections, ### for subsections.
    - You MUST include Markdown tables to organize data where applicable.
    - Use bullet points and **bold** text extensively.
-   - MATH NOTATION: For inline math use $$formula$$, for block use $$formula$$
+   - MATH NOTATION: For inline math use $formula$, for block use $$formula$$
 ===SPLIT===
 Section 4: Create exactly ${flashcardCount} FLASHCARDS.
 Format strictly like this, replacing brackets with content:
-FRONT: [Concept or Term]
-BACK: [Detailed Definition]
+Each flashcard should ask a QUESTION on the front and provide the ANSWER on the back.
 
-FRONT: [Next Concept]
-BACK: [Next Definition]
+QUESTION: [Question that tests understanding of a concept]
+ANSWER: [Detailed answer/explanation]
+
+QUESTION: [Next question]
+ANSWER: [Next answer]
 ===SPLIT===
 Section 5: Create exactly ${quizCount} QUIZ QUESTIONS.
 Format strictly like this, replacing brackets with content:
@@ -315,8 +451,31 @@ Ensure you output EXACTLY 5 parts using "===SPLIT===" as the separator.`;
       summaryClean = summaryClean.replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*)/is, '').trim();
       parts[1] = summaryClean;
 
-      const podPrompt = `Convert this content into a teaching monologue for an audio podcast. Short sentences, conversational. Make it engaging.`;
-      const podResult = await callLLM(podPrompt, parts[1] || finalContext.substring(0, 3000));
+      // Generate clean podcast script without emotions, sound effects, or special characters
+      const podPrompt = `Convert this content into a teaching monologue for an audio podcast. 
+
+IMPORTANT RULES:
+- Use short, clear sentences
+- Conversational and engaging tone
+- NO stage directions, emotions, or sound effects
+- NO asterisks, brackets, or special characters
+- NO indications of tone like (excited), (pause), etc.
+- Just plain text that can be read aloud naturally
+
+Content to convert:
+${parts[1] || finalContext.substring(0, 3000)}`;
+      
+      const podResult = await callLLM(podPrompt, '');
+      // Clean the podcast result further
+      const cleanPodResult = podResult
+        .replace(/\*[^*]*\*/g, '') // Remove asterisk-wrapped content
+        .replace(/\([^)]*\)/g, '') // Remove parenthetical directions
+        .replace(/\[[^\]]*\]/g, '') // Remove bracketed content
+        .replace(/\{[^}]*\}/g, '') // Remove curly brace content
+        .replace(/\b(excitedly|happily|sadly|angrily|cheerfully|dramatically|enthusiastically)\b/gi, '')
+        .replace(/\b(pause|beat|sigh|laugh|chuckle|gasp)\b/gi, '')
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim();
 
       clearInterval(progressInterval);
       clearInterval(tipInterval);
@@ -330,7 +489,7 @@ Ensure you output EXACTLY 5 parts using "===SPLIT===" as the separator.`;
         flashcardCount,
         quizCount,
         parts,
-        podcast: podResult,
+        podcast: cleanPodResult,
         chatCount: 0,
       };
 
@@ -338,6 +497,11 @@ Ensure you output EXACTLY 5 parts using "===SPLIT===" as the separator.`;
       const newHistory = [studySet, ...studyHistory].slice(0, 50);
       setStudyHistory(newHistory);
       saveToStorage('hz_study_history', newHistory);
+
+      // Sync to Firebase for pro users
+      if (tier === 'pro') {
+        await syncToFirebase(studySet);
+      }
 
       // Update stats
       const today = new Date().toDateString();
@@ -369,6 +533,7 @@ Ensure you output EXACTLY 5 parts using "===SPLIT===" as the separator.`;
 
   const loadStudySet = (studySet: StudySet) => {
     setCurrentStudySet(studySet);
+    setEditedNotes(studySet.parts[2] || '');
     setChatMessages([
       {
         role: 'ai',
@@ -464,47 +629,104 @@ ${context}`;
       const newHistory = [newSet, ...studyHistory].slice(0, 50);
       setStudyHistory(newHistory);
       saveToStorage('hz_study_history', newHistory);
+      
+      // Sync to Firebase for pro users
+      if (tier === 'pro') {
+        await syncToFirebase(newSet);
+      }
+      
       loadStudySet(newSet);
     } catch (e: any) {
       alert('Translation failed: ' + e.message);
     }
   };
 
-  const togglePodcast = () => {
+  // Edge TTS voices for podcast
+  const EDGE_TTS_VOICES = [
+    { name: 'en-US-AriaNeural', label: 'Aria (US Female)' },
+    { name: 'en-US-GuyNeural', label: 'Guy (US Male)' },
+    { name: 'en-GB-SoniaNeural', label: 'Sonia (UK Female)' },
+    { name: 'en-GB-RyanNeural', label: 'Ryan (UK Male)' },
+    { name: 'en-AU-NatashaNeural', label: 'Natasha (AU Female)' },
+  ];
+
+  const [selectedVoice, setSelectedVoice] = useState('en-US-AriaNeural');
+
+  const togglePodcast = async () => {
     if (!currentStudySet?.podcast) return;
     
-    const lines = currentStudySet.podcast.split('\n').filter(l => l.trim());
-    let index = 0;
+    if (isPlaying) {
+      // Stop playback
+      window.speechSynthesis.cancel();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      setIsPlaying(false);
+      return;
+    }
 
-    const speak = () => {
-      if (index >= lines.length) return;
+    // Start playback using browser TTS with selected voice
+    const lines = currentStudySet.podcast.split(/[.!?]+/).filter(l => l.trim().length > 10);
+    setIsPlaying(true);
+
+    const speakLine = (index: number) => {
+      if (index >= lines.length) {
+        setIsPlaying(false);
+        return;
+      }
+
       const utterance = new SpeechSynthesisUtterance(lines[index]);
-      utterance.rate = 1.05;
-      utterance.onend = () => {
-        index++;
-        speak();
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      
+      // Try to set voice
+      const voices = window.speechSynthesis.getVoices();
+      const preferredVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural') || v.lang === 'en-US');
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      utterance.onend = () => speakLine(index + 1);
+      utterance.onerror = () => {
+        setIsPlaying(false);
       };
+      
       window.speechSynthesis.speak(utterance);
     };
 
-    if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
-    } else {
-      speak();
-    }
+    speakLine(0);
   };
+
+  // Load voices when available
+  useEffect(() => {
+    const loadVoices = () => {
+      window.speechSynthesis.getVoices();
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
 
   const renderFlashcards = (text: string) => {
     if (!text || text.includes('incomplete')) {
       return <p className="text-gray-500">No flashcards generated.</p>;
     }
 
-    const regex = /FRONT:\s*([\s\S]*?)\s*BACK:\s*([\s\S]*?)(?=FRONT:|$)/gi;
-    const cards: { front: string; back: string }[] = [];
+    // Updated regex to match QUESTION/ANSWER format
+    const regex = /QUESTION:\s*([\s\S]*?)\s*ANSWER:\s*([\s\S]*?)(?=QUESTION:|$)/gi;
+    const cards: { question: string; answer: string }[] = [];
     let match;
 
     while ((match = regex.exec(text)) !== null) {
-      cards.push({ front: match[1].trim(), back: match[2].trim() });
+      cards.push({ question: match[1].trim(), answer: match[2].trim() });
+    }
+
+    // Fallback to old format if no cards found
+    if (cards.length === 0) {
+      const oldRegex = /FRONT:\s*([\s\S]*?)\s*BACK:\s*([\s\S]*?)(?=FRONT:|$)/gi;
+      while ((match = oldRegex.exec(text)) !== null) {
+        cards.push({ question: match[1].trim(), answer: match[2].trim() });
+      }
     }
 
     return (
@@ -512,8 +734,8 @@ ${context}`;
         {cards.map((card, i) => (
           <div key={i} className="flip-card" onClick={(e) => e.currentTarget.classList.toggle('flipped')}>
             <div className="flip-card-inner">
-              <div className="flip-card-front" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(card.front) }} />
-              <div className="flip-card-back" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(card.back) }} />
+              <div className="flip-card-front bg-gray-800/50 backdrop-blur-lg border border-gray-700" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(card.question) }} />
+              <div className="flip-card-back" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(card.answer) }} />
             </div>
           </div>
         ))}
@@ -541,14 +763,14 @@ ${context}`;
     return (
       <div className="max-w-3xl mx-auto space-y-4">
         {questions.map((q, i) => (
-          <div key={i} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl">
-            <h4 className="font-bold text-gray-900 dark:text-white mb-4">{i + 1}. {q.q}</h4>
+          <div key={i} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700 p-6 rounded-2xl">
+            <h4 className="font-bold text-gray-100 mb-4">{i + 1}. {q.q}</h4>
             <div className="space-y-2">
               {q.opts.map((opt, j) => {
                 const letter = String.fromCharCode(65 + j);
                 const isCorrect = letter === q.answer;
                 return (
-                  <label key={j} className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition quiz-option-lbl" data-is-correct={isCorrect}>
+                  <label key={j} className="flex items-center gap-3 p-3 border border-gray-600 rounded-xl cursor-pointer hover:bg-gray-700/50 transition quiz-option-lbl" data-is-correct={isCorrect}>
                     <input type="radio" name={`quiz_q_${i}`} value={letter} className="accent-green-500" onChange={(e) => {
                       const container = e.target.closest('.space-y-2');
                       const labels = container?.querySelectorAll('.quiz-option-lbl');
@@ -556,15 +778,15 @@ ${context}`;
                         l.style.pointerEvents = 'none';
                         const lblIsCorrect = l.getAttribute('data-is-correct') === 'true';
                         if (lblIsCorrect) {
-                          l.classList.remove('border-gray-200', 'dark:border-gray-700');
-                          l.classList.add('bg-green-50', 'border-green-500', 'dark:bg-green-900/30');
+                          l.classList.remove('border-gray-600');
+                          l.classList.add('bg-green-900/30', 'border-green-500');
                         } else if (l.querySelector('input')?.checked) {
-                          l.classList.remove('border-gray-200', 'dark:border-gray-700');
-                          l.classList.add('bg-red-50', 'border-red-500', 'dark:bg-red-900/30');
+                          l.classList.remove('border-gray-600');
+                          l.classList.add('bg-red-900/30', 'border-red-500');
                         }
                       });
                     }} />
-                    <span className="dark:text-gray-200"><b>{letter}.</b> {opt}</span>
+                    <span className="text-gray-200"><b>{letter}.</b> {opt}</span>
                   </label>
                 );
               })}
@@ -575,23 +797,107 @@ ${context}`;
     );
   };
 
-  // Sidebar component
+  // Handle opening chat - collapse sidebar and don't dim
+  const handleOpenChat = () => {
+    setSidebarCollapsed(true);
+    setChatOpen(true);
+  };
+
+  // Handle closing chat - restore sidebar
+  const handleCloseChat = () => {
+    setChatOpen(false);
+    setSidebarCollapsed(false);
+  };
+
+  // Pro note editing handlers
+  const handleFormat = (format: string) => {
+    document.execCommand(format, false);
+  };
+
+  const handleInsertMath = () => {
+    const mathInput = prompt('Enter LaTeX math (e.g., E = mc^2):');
+    if (mathInput) {
+      document.execCommand('insertText', false, ` $${mathInput}$ `);
+    }
+  };
+
+  const handleInsertImage = () => {
+    const imageUrl = prompt('Enter image URL:');
+    if (imageUrl) {
+      document.execCommand('insertImage', false, imageUrl);
+    }
+  };
+
+  const handleInsertTable = () => {
+    const rows = parseInt(prompt('Number of rows:', '3') || '3');
+    const cols = parseInt(prompt('Number of columns:', '3') || '3');
+    
+    let tableHtml = '<table class="border-collapse border border-gray-400 my-4"><tbody>';
+    for (let i = 0; i < rows; i++) {
+      tableHtml += '<tr>';
+      for (let j = 0; j < cols; j++) {
+        tableHtml += '<td class="border border-gray-400 p-2">Cell</td>';
+      }
+      tableHtml += '</tr>';
+    }
+    tableHtml += '</tbody></table>';
+    
+    document.execCommand('insertHTML', false, tableHtml);
+  };
+
+  const handleAddComment = () => {
+    const selection = window.getSelection()?.toString();
+    if (selection) {
+      const comment = prompt('Add your comment:');
+      if (comment) {
+        const highlightedText = `<span class="bg-yellow-200 dark:bg-yellow-700" title="${comment}">${selection}</span>`;
+        document.execCommand('insertHTML', false, highlightedText);
+      }
+    }
+  };
+
+  const saveEditedNotes = async () => {
+    if (!currentStudySet) return;
+    
+    const updatedParts = [...currentStudySet.parts];
+    updatedParts[2] = editedNotes;
+    
+    const updatedSet = {
+      ...currentStudySet,
+      parts: updatedParts,
+    };
+    
+    setCurrentStudySet(updatedSet);
+    
+    const newHistory = studyHistory.map(s => s.id === updatedSet.id ? updatedSet : s);
+    setStudyHistory(newHistory);
+    saveToStorage('hz_study_history', newHistory);
+    
+    // Sync to Firebase for pro users
+    if (tier === 'pro') {
+      await syncToFirebase(updatedSet);
+    }
+    
+    setIsEditing(false);
+  };
+
+  // Sidebar component with desktop hamburger support
   const Sidebar = () => (
-    <aside className={`w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+    <aside className={`bg-gray-900 border-r border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-all duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${sidebarCollapsed ? 'md:w-0 md:opacity-0 md:overflow-hidden' : 'w-72'}`}>
       <div className="p-6 flex items-center justify-between">
         <Link href="/dashboard/" className="flex items-center gap-3 hover:opacity-90 transition">
           <img src="/hazelnote_logo.png" alt="HazelNote Logo" className="w-10 h-10 rounded-xl object-cover" />
           <div className="flex flex-col">
-            <h1 className="font-extrabold text-xl tracking-tight text-gray-900 dark:text-white leading-none">HazelNote</h1>
+            <h1 className="font-extrabold text-xl tracking-tight text-white leading-none">HazelNote</h1>
             <span className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-wider">by free-ed</span>
           </div>
         </Link>
-        <button onClick={() => setSidebarOpen(false)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition dark:text-gray-400 dark:hover:bg-gray-800">
+        <button onClick={() => setSidebarOpen(false)} className="md:hidden p-2 text-gray-500 hover:bg-gray-800 rounded-lg transition">
           <X className="w-5 h-5" />
         </button>
       </div>
       
-      <div className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">Workspace</div>
+      <div className="px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Workspace</div>
       <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
         <button onClick={() => { setCurrentView('dashboard'); setSidebarOpen(false); }} className={`w-full text-left sidebar-item ${currentView === 'dashboard' ? 'active' : ''}`}>
           <LayoutDashboard className="w-5 h-5" /> Dashboard
@@ -604,7 +910,7 @@ ${context}`;
         </Link>
       </nav>
 
-      <div className="p-4 border-t border-gray-200 dark:border-gray-800 space-y-1">
+      <div className="p-4 border-t border-gray-800 space-y-1">
         {tier === 'free' && (
           <div className="mb-2">
             <button onClick={() => setGoProModalOpen(true)} className="w-full go-pro-badge py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm">
@@ -612,10 +918,22 @@ ${context}`;
             </button>
           </div>
         )}
-        <Link href="/profile/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
+        {tier === 'pro' && (
+          <div className="mb-2 px-3 py-2 bg-green-900/30 rounded-xl">
+            <div className="flex items-center gap-2 text-xs text-green-400">
+              <Save className="w-3 h-3" />
+              <span>Pro Plan Active</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+              <RefreshCw className={`w-3 h-3 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+              <span>{syncStatus === 'synced' ? 'Synced' : syncStatus === 'syncing' ? 'Syncing...' : 'Offline'}</span>
+            </div>
+          </div>
+        )}
+        <Link href="/profile/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-400 hover:text-white">
           <UserCircle className="w-5 h-5" /> Profile & Settings
         </Link>
-        <Link href="/support/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
+        <Link href="/support/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-400 hover:text-white">
           <HelpCircle className="w-5 h-5" /> Support
         </Link>
       </div>
@@ -623,7 +941,7 @@ ${context}`;
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-slate-900">
+    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-[#0F172A] to-[#1E293B]">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm" />
@@ -631,15 +949,24 @@ ${context}`;
 
       <Sidebar />
 
-      <main className="flex-1 h-full overflow-y-auto relative">
+      <main className={`flex-1 h-full overflow-y-auto relative transition-all duration-300 ${sidebarCollapsed ? 'md:ml-0' : ''}`}>
+        {/* Desktop hamburger menu button */}
+        <button 
+          onClick={() => setSidebarOpen(true)} 
+          className="hidden md:flex fixed top-4 left-4 z-30 p-2 bg-gray-800/80 backdrop-blur border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition items-center gap-2"
+        >
+          <Menu className="w-5 h-5" />
+          <span className="text-sm font-medium">Menu</span>
+        </button>
+
         {/* Mobile header */}
-        <div className="md:hidden bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-3 sticky top-0 z-30">
-          <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
+        <div className="md:hidden bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center gap-3 sticky top-0 z-30">
+          <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-300 hover:bg-gray-800 rounded-lg transition">
             <Menu className="w-6 h-6" />
           </button>
           <div className="flex items-center gap-2">
             <img src="/hazelnote_logo.png" alt="HazelNote Logo" className="w-8 h-8 rounded-lg object-cover" />
-            <span className="font-extrabold text-lg text-gray-900 dark:text-white">HazelNote</span>
+            <span className="font-extrabold text-lg text-white">HazelNote</span>
           </div>
         </div>
 
@@ -647,72 +974,85 @@ ${context}`;
         {currentView === 'dashboard' && (
           <div className="p-6 md:p-8 max-w-5xl mx-auto pt-8 md:pt-12">
             <header className="mb-10">
-              <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 dark:text-white mb-2 tracking-tight">Welcome back! 👋</h2>
-              <p className="text-gray-500 dark:text-gray-400 text-lg">Track your progress and continue learning.</p>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-2 tracking-tight">Welcome back! 👋</h2>
+              <p className="text-gray-400 text-lg">Track your progress and continue learning.</p>
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-              <div className="glass-card p-6 flex items-center gap-5 transition hover:shadow-lg dark:bg-gray-800 dark:border-gray-700">
-                <div className="w-14 h-14 rounded-2xl bg-green-100 dark:bg-green-900/40 flex items-center justify-center text-green-600 dark:text-green-400">
+              <div className="glass-card p-6 flex items-center gap-5 transition hover:shadow-lg bg-gray-800/50 backdrop-blur-lg border-gray-700">
+                <div className="w-14 h-14 rounded-2xl bg-green-900/40 flex items-center justify-center text-green-400">
                   <Flame className="w-7 h-7" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Study Streak</p>
-                  <p className="text-3xl font-extrabold text-gray-900 dark:text-white">
-                    {stats.streak} <span className="text-lg text-gray-400 font-medium">Days</span>
+                  <p className="text-sm text-gray-400 font-medium">Study Streak</p>
+                  <p className="text-3xl font-extrabold text-white">
+                    {stats.streak} <span className="text-lg text-gray-500 font-medium">Days</span>
                   </p>
                 </div>
               </div>
-              <div className="glass-card p-6 flex items-center gap-5 transition hover:shadow-lg dark:bg-gray-800 dark:border-gray-700">
-                <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400">
+              <div className="glass-card p-6 flex items-center gap-5 transition hover:shadow-lg bg-gray-800/50 backdrop-blur-lg border-gray-700">
+                <div className="w-14 h-14 rounded-2xl bg-blue-900/40 flex items-center justify-center text-blue-400">
                   <FileCheck2 className="w-7 h-7" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Notes Generated</p>
-                  <p className="text-3xl font-extrabold text-gray-900 dark:text-white">{stats.notes}</p>
+                  <p className="text-sm text-gray-400 font-medium">Notes Generated</p>
+                  <p className="text-3xl font-extrabold text-white">{stats.notes}</p>
                 </div>
               </div>
+              {tier === 'free' && (
+                <div className="glass-card p-6 flex items-center gap-5 transition hover:shadow-lg bg-gray-800/50 backdrop-blur-lg border-gray-700">
+                  <div className="w-14 h-14 rounded-2xl bg-purple-900/40 flex items-center justify-center text-purple-400">
+                    <Sparkles className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400 font-medium">Monthly Sets</p>
+                    <p className="text-3xl font-extrabold text-white">
+                      {stats.monthlySets?.[getCurrentMonth()] || 0}<span className="text-lg text-gray-500 font-medium">/2</span>
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="glass-card p-8 md:p-12 text-center relative overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+            <div className="glass-card p-8 md:p-12 text-center relative overflow-hidden bg-gray-800/50 backdrop-blur-lg border-gray-700">
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="w-20 h-20 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500 dark:text-green-400">
+              <div className="w-20 h-20 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-green-400">
                 <Sparkles className="w-10 h-10" />
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Ready to learn something new?</h3>
-              <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-md mx-auto">Upload PDFs, dictate voice notes, or paste Web/YouTube URLs to generate your next study set.</p>
-              <button onClick={() => setCurrentView('create')} className="btn-primary px-10 py-4 text-lg shadow-xl shadow-green-200 dark:shadow-none">
+              <h3 className="text-2xl font-bold text-white mb-2">Ready to learn something new?</h3>
+              <p className="text-gray-400 mb-8 max-w-md mx-auto">Upload PDFs, dictate voice notes, or paste YouTube URLs to generate your next study set.</p>
+              <button onClick={() => setCurrentView('create')} className="btn-primary px-10 py-4 text-lg shadow-xl">
                 Create New Study Set
               </button>
             </div>
 
             <div className="mt-10">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Recent Study Sets</h3>
+                <h3 className="text-2xl font-bold text-white">Recent Study Sets</h3>
               </div>
               <div className="space-y-4">
                 {studyHistory.length === 0 ? (
-                  <p className="text-gray-400 text-center py-8">No study sets yet. Create your first one!</p>
+                  <p className="text-gray-500 text-center py-8">No study sets yet. Create your first one!</p>
                 ) : (
                   studyHistory.slice(0, 10).map((set) => (
                     <div
                       key={set.id}
                       onClick={() => loadStudySet(set)}
-                      className="glass-card p-5 hover:shadow-lg transition cursor-pointer dark:bg-gray-800 dark:border-gray-700"
+                      className="glass-card p-5 hover:shadow-lg transition cursor-pointer bg-gray-800/50 backdrop-blur-lg border-gray-700"
                     >
                       <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-bold text-gray-900 dark:text-white flex-1 mr-2">{set.title}</h4>
+                        <h4 className="font-bold text-white flex-1 mr-2">{set.title}</h4>
                         <div className="flex gap-2">
-                          <button onClick={(e) => deleteStudySet(set.id, e)} className="text-gray-400 hover:text-red-500 transition" title="Delete">
+                          <button onClick={(e) => deleteStudySet(set.id, e)} className="text-gray-500 hover:text-red-400 transition" title="Delete">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{set.summary}</p>
+                      <p className="text-sm text-gray-400 mb-3">{set.summary}</p>
                       <div className="flex gap-3 text-xs flex-wrap">
-                        <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2 py-1 rounded-full font-medium">{set.flashcardCount} Cards</span>
-                        <span className="bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded-full font-medium">{set.quizCount} Questions</span>
-                        <span className="text-gray-400">{new Date(set.date).toLocaleDateString()}</span>
+                        <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded-full font-medium">{set.flashcardCount} Cards</span>
+                        <span className="bg-green-900/30 text-green-400 px-2 py-1 rounded-full font-medium">{set.quizCount} Questions</span>
+                        <span className="text-gray-500">{new Date(set.date).toLocaleDateString()}</span>
                       </div>
                     </div>
                   ))
@@ -725,32 +1065,32 @@ ${context}`;
         {/* Create View */}
         {currentView === 'create' && !isLoading && (
           <div className="p-6 md:p-8 max-w-4xl mx-auto pt-8 md:pt-12">
-            <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 dark:text-white mb-8 text-center tracking-tight">What are we studying today?</h2>
+            <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-8 text-center tracking-tight">What are we studying today?</h2>
             
-            <div className="glass-card p-2 rounded-[32px] flex flex-col md:flex-row gap-2 mb-10 mx-auto max-w-2xl bg-white shadow-xl shadow-gray-100 dark:shadow-none dark:bg-gray-800 border border-gray-100 dark:border-gray-700">
-              <button onClick={() => setInputMode('pdf')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'pdf' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+            <div className="glass-card p-2 rounded-[32px] flex flex-col md:flex-row gap-2 mb-10 mx-auto max-w-2xl bg-gray-800/50 backdrop-blur-lg border-gray-700">
+              <button onClick={() => setInputMode('pdf')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'pdf' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}>
                 <FileUp className="w-4 h-4" /> PDF Upload
               </button>
-              <button onClick={() => setInputMode('voice')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'voice' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+              <button onClick={() => setInputMode('voice')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'voice' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}>
                 <Mic className="w-4 h-4" /> Voice Record
               </button>
-              <button onClick={() => setInputMode('link')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'link' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-                <LinkIcon className="w-4 h-4" /> Web / YouTube
+              <button onClick={() => setInputMode('link')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'link' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}>
+                <LinkIcon className="w-4 h-4" /> YouTube
               </button>
             </div>
 
             {inputMode === 'pdf' && (
-              <div className="glass-card p-8 md:p-12 text-center border-2 border-dashed border-gray-300 dark:border-gray-600 dark:bg-gray-800">
-                <FileText className="w-16 h-16 text-gray-300 dark:text-gray-500 mx-auto mb-4" />
-                <h3 className="text-xl font-bold mb-2 dark:text-white">Upload Multiple PDFs</h3>
-                <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-sm mx-auto">Upload documents to be instantly processed via Gemini AI.</p>
+              <div className="glass-card p-8 md:p-12 text-center border-2 border-dashed border-gray-600 bg-gray-800/50 backdrop-blur-lg">
+                <FileText className="w-16 h-16 text-gray-500 mx-auto mb-4" />
+                <h3 className="text-xl font-bold mb-2 text-white">Upload Multiple PDFs</h3>
+                <p className="text-gray-400 mb-8 max-w-sm mx-auto">Upload documents to be instantly processed via Gemini AI. {tier === 'free' ? 'Max 10MB per file.' : 'Max 500MB per file.'}</p>
                 <input type="file" id="pdf-upload" multiple accept=".pdf" className="hidden" onChange={handlePDFUpload} />
                 <label htmlFor="pdf-upload" className="btn-primary px-10 py-4 cursor-pointer inline-block shadow-lg text-lg">Browse Files</label>
                 <div className="mt-8 flex flex-wrap gap-2 justify-center">
                   {pdfFiles.map((file, i) => (
-                    <span key={i} className="bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-xs px-4 py-2 rounded-full font-bold border border-green-200 dark:border-green-800 flex items-center gap-2">
+                    <span key={i} className="bg-green-900/40 text-green-400 text-xs px-4 py-2 rounded-full font-bold border border-green-800 flex items-center gap-2">
                       <CheckCircle className="w-3 h-3" /> {file.name}
-                      <button onClick={() => removePDF(i)} className="hover:text-red-500 transition ml-1 bg-green-100/50 hover:bg-red-100 dark:bg-green-800 dark:hover:bg-red-900/50 p-1 rounded-full">
+                      <button onClick={() => removePDF(i)} className="hover:text-red-400 transition ml-1 bg-green-800/50 hover:bg-red-900/50 p-1 rounded-full">
                         <X className="w-3 h-3" />
                       </button>
                     </span>
@@ -760,41 +1100,32 @@ ${context}`;
             )}
 
             {inputMode === 'voice' && (
-              <div className="glass-card p-8 md:p-12 text-center dark:bg-gray-800">
+              <div className="glass-card p-8 md:p-12 text-center bg-gray-800/50 backdrop-blur-lg border-gray-700">
                 <textarea
                   value={voiceText}
                   onChange={(e) => setVoiceText(e.target.value)}
-                  className="w-full h-40 p-5 border border-gray-200 dark:border-gray-600 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-50 dark:bg-gray-700 dark:text-white text-base"
+                  className="w-full h-40 p-5 border border-gray-600 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-700 text-white text-base"
                   placeholder="Type or dictate your notes..."
                 />
               </div>
             )}
 
             {inputMode === 'link' && (
-              <div className="glass-card p-8 md:p-10 dark:bg-gray-800">
-                <div className="flex flex-col md:flex-row gap-3 mb-4">
+              <div className="glass-card p-8 md:p-10 bg-gray-800/50 backdrop-blur-lg border-gray-700">
+                <div className="flex flex-col gap-3 mb-4">
                   <input
                     type="text"
-                    id="web-url-input"
-                    className="flex-1 border border-gray-200 dark:border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 bg-gray-50 dark:bg-gray-700 dark:text-white text-sm font-medium"
-                    placeholder="Paste a Wikipedia, Article, or YouTube URL here..."
+                    id="youtube-url-input"
+                    className="flex-1 border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 bg-gray-700 text-white text-sm font-medium"
+                    placeholder="Paste a YouTube URL here..."
                   />
-                  <button id="web-fetch-btn" onClick={fetchYouTubeContent} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold transition flex items-center justify-center gap-2 md:w-auto w-full">
-                    <Download className="w-4 h-4" /> Extract Text
-                  </button>
                 </div>
-                <div id="fetch-status-msg" className="text-sm font-medium text-center mb-3 hidden"></div>
-                <textarea
-                  value={webText}
-                  onChange={(e) => setWebText(e.target.value)}
-                  className="w-full h-48 p-5 border border-gray-200 dark:border-gray-600 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-50 dark:bg-gray-700 dark:text-white text-sm font-mono"
-                  placeholder="Extracted text or transcript will appear here..."
-                />
+                <p className="text-sm text-gray-400 mb-4">Enter a YouTube URL and click Generate to automatically fetch the transcript and create a study set.</p>
               </div>
             )}
 
             <div className="mt-10 text-center">
-              <button onClick={generateStudySet} className="btn-primary px-10 md:px-16 py-4 md:py-5 text-lg md:text-xl shadow-xl shadow-green-200 dark:shadow-none w-full md:w-auto flex items-center justify-center gap-3 mx-auto">
+              <button onClick={generateStudySet} className="btn-primary px-10 md:px-16 py-4 md:py-5 text-lg md:text-xl shadow-xl w-full md:w-auto flex items-center justify-center gap-3 mx-auto">
                 <Wand2 className="w-5 h-5" /> Generate Study Set
               </button>
             </div>
@@ -806,16 +1137,16 @@ ${context}`;
           <div className="max-w-2xl mx-auto mt-10 text-center p-8 md:p-12">
             <div className="relative w-40 h-40 mx-auto mb-8">
               <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="6" className="text-gray-200 dark:text-gray-700"></circle>
+                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="6" className="text-gray-700"></circle>
                 <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="6" strokeDasharray="283" strokeDashoffset={283 - (283 * loadingProgress / 100)} className="text-green-500 transition-all duration-300 ease-out glow-animation-stroke" strokeLinecap="round"></circle>
               </svg>
               <div className="absolute inset-0 flex items-center justify-center flex-col">
-                <span className="text-3xl font-extrabold text-gray-900 dark:text-white tracking-tighter">{Math.round(loadingProgress)}%</span>
+                <span className="text-3xl font-extrabold text-white tracking-tighter">{Math.round(loadingProgress)}%</span>
               </div>
             </div>
-            <h3 className="text-2xl font-extrabold text-gray-900 dark:text-white mb-4">Synthesizing Knowledge...</h3>
+            <h3 className="text-2xl font-extrabold text-white mb-4">Synthesizing Knowledge...</h3>
             <div className="h-10 flex items-center justify-center">
-              <p className="text-sm font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 px-5 py-2.5 rounded-full border border-green-200 dark:border-green-800 shadow-sm transition-opacity duration-300">
+              <p className="text-sm font-medium text-green-400 bg-green-900/30 px-5 py-2.5 rounded-full border border-green-800 shadow-sm transition-opacity duration-300">
                 {loadingTip}
               </p>
             </div>
@@ -826,32 +1157,32 @@ ${context}`;
         {currentView === 'study' && currentStudySet && (
           <div className="p-4 md:p-8 max-w-6xl mx-auto pb-32 pt-6 md:pt-10">
             <div className="mb-6 flex justify-between items-center">
-              <button onClick={() => setCurrentView('dashboard')} className="text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition flex items-center gap-2 text-sm font-medium">
+              <button onClick={() => setCurrentView('dashboard')} className="text-gray-400 hover:text-white transition flex items-center gap-2 text-sm font-medium">
                 <ArrowLeft className="w-4 h-4" /> Back to Dashboard
               </button>
             </div>
             
-            <div className="glass-card overflow-hidden dark:bg-gray-800 dark:border-gray-700">
-              <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div className="glass-card overflow-hidden bg-gray-800/50 backdrop-blur-lg border-gray-700">
+              <div className="border-b border-gray-700 bg-gray-800/50">
                 <div className="p-6 md:px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">{currentStudySet.title}</h2>
+                  <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">{currentStudySet.title}</h2>
                   
                   <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    <button onClick={() => window.print()} className="text-sm bg-white hover:bg-gray-50 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-gray-200 dark:border-gray-600 shadow-sm">
+                    <button onClick={() => window.print()} className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-gray-600 shadow-sm">
                       <Printer className="w-4 h-4" /> Export PDF
                     </button>
-                    <button onClick={() => setTranslateModalOpen(true)} className="text-sm bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-400 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-blue-200 dark:border-blue-800 shadow-sm">
+                    <button onClick={() => setTranslateModalOpen(true)} className="text-sm bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-blue-800 shadow-sm">
                       <Languages className="w-4 h-4" /> Translate
                     </button>
-                    <button onClick={() => setChatOpen(true)} className="text-sm bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition shadow-md border border-green-600">
+                    <button onClick={handleOpenChat} className="text-sm bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition shadow-md border border-green-600">
                       <img src="/hazelnote_tutor.png" className="w-5 h-5 rounded-full object-cover bg-white border border-green-400" /> Chat with Professor Hazel
                     </button>
                   </div>
                 </div>
               </div>
 
-              <div className="px-6 md:px-8 pt-8 -mb-4 bg-gray-50 dark:bg-slate-900 z-10 relative">
-                <div className="inline-flex p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-[20px] shadow-sm gap-1 overflow-x-auto max-w-full">
+              <div className="px-6 md:px-8 pt-8 -mb-4 bg-gradient-to-br from-[#0F172A] to-[#1E293B] z-10 relative">
+                <div className="inline-flex p-1.5 bg-gray-800 border border-gray-700 rounded-[20px] shadow-sm gap-1 overflow-x-auto max-w-full">
                   {(['notes', 'flashcards', 'quiz', 'podcast'] as const).map((tab) => (
                     <button
                       key={tab}
@@ -859,7 +1190,7 @@ ${context}`;
                       className={`text-sm px-5 py-2.5 rounded-xl font-bold transition-all ${
                         currentTab === tab
                           ? 'bg-green-500 text-white shadow-md transform scale-[1.02]'
-                          : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700'
                       }`}
                     >
                       {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -868,16 +1199,68 @@ ${context}`;
                 </div>
               </div>
 
-              <div className="p-6 md:p-8 min-h-[600px] bg-gray-50 dark:bg-slate-900 study-content-area relative z-0">
+              <div className="p-6 md:p-8 min-h-[600px] bg-gradient-to-br from-[#0F172A] to-[#1E293B] study-content-area relative z-0">
                 {currentTab === 'notes' && (
                   <div>
-                    <div className="bg-green-50/60 p-6 md:p-8 rounded-[24px] mb-8 border border-green-100/60 dark:bg-green-900/20 dark:border-green-800/50">
-                      <h3 className="text-green-700 dark:text-green-400 font-extrabold text-xs uppercase tracking-widest mb-4 flex items-center gap-2">
+                    {/* Pro Note Editing Toolbar */}
+                    {tier === 'pro' && (
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-green-400 uppercase tracking-wider flex items-center gap-1">
+                            <Sparkles className="w-3 h-3" /> Pro Editing Enabled
+                          </span>
+                          <div className="flex gap-2">
+                            {isEditing ? (
+                              <>
+                                <button onClick={saveEditedNotes} className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg font-bold flex items-center gap-1">
+                                  <Save className="w-3 h-3" /> Save
+                                </button>
+                                <button onClick={() => setIsEditing(false)} className="text-xs bg-gray-700 text-gray-300 px-3 py-1 rounded-lg font-bold">
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button onClick={() => setIsEditing(true)} className="text-xs bg-blue-900/30 text-blue-400 px-3 py-1 rounded-lg font-bold flex items-center gap-1">
+                                <Type className="w-3 h-3" /> Edit Notes
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {isEditing && (
+                          <NoteEditorToolbar
+                            onFormat={handleFormat}
+                            onInsertMath={handleInsertMath}
+                            onInsertImage={handleInsertImage}
+                            onInsertTable={handleInsertTable}
+                            onAddComment={handleAddComment}
+                            fontSize={fontSize}
+                            setFontSize={setFontSize}
+                            fontColor={fontColor}
+                            setFontColor={setFontColor}
+                            highlightColor={highlightColor}
+                            setHighlightColor={setHighlightColor}
+                          />
+                        )}
+                      </div>
+                    )}
+                    <div className="bg-green-900/20 p-6 md:p-8 rounded-[24px] mb-8 border border-green-800/50">
+                      <h3 className="text-green-400 font-extrabold text-xs uppercase tracking-widest mb-4 flex items-center gap-2">
                         <Sparkles className="w-4 h-4" /> Executive Summary
                       </h3>
-                      <div className="text-gray-800 dark:text-gray-200 text-lg leading-relaxed prose-p:my-0" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[1] || 'No summary available.') }} />
+                      <div className="text-gray-200 text-lg leading-relaxed prose-p:my-0" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[1] || 'No summary available.') }} />
                     </div>
-                    <div className="prose prose-lg max-w-none text-gray-800 dark:text-gray-200" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[2] || 'No notes available.') }} />
+                    {isEditing && tier === 'pro' ? (
+                      <div 
+                        className="prose prose-lg max-w-none text-gray-200 bg-gray-800/50 p-6 rounded-2xl border border-gray-700 min-h-[400px]"
+                        contentEditable
+                        suppressContentEditableWarning
+                        onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)}
+                        dangerouslySetInnerHTML={{ __html: editedNotes }}
+                        style={{ fontSize: `${fontSize}px`, color: fontColor }}
+                      />
+                    ) : (
+                      <div className="prose prose-lg max-w-none text-gray-200" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[2] || 'No notes available.') }} />
+                    )}
                   </div>
                 )}
                 
@@ -894,20 +1277,36 @@ ${context}`;
                     <div className="bg-gradient-to-br from-indigo-900 to-purple-900 rounded-3xl p-8 text-white text-center shadow-xl">
                       <div className="w-24 h-24 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-6 relative">
                         <Headphones className="w-10 h-10 text-white" />
-                        {window.speechSynthesis?.speaking && <div className="absolute inset-0 rounded-full border-4 border-white/30 animate-ping"></div>}
+                        {isPlaying && <div className="absolute inset-0 rounded-full border-4 border-white/30 animate-ping"></div>}
                       </div>
                       <h3 className="text-2xl font-bold mb-2">Audio Lesson</h3>
-                      <p className="text-indigo-200 mb-8 max-w-md mx-auto text-sm">Listen to an AI-generated teaching monologue based on your notes.</p>
-                      <button onClick={togglePodcast} className="bg-white text-indigo-900 w-16 h-16 rounded-full flex items-center justify-center mx-auto hover:scale-105 transition shadow-lg">
-                        {window.speechSynthesis?.speaking ? <Square className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
+                      <p className="text-indigo-200 mb-6 max-w-md mx-auto text-sm">Listen to an AI-generated teaching monologue based on your notes.</p>
+                      
+                      {/* Voice Selection */}
+                      <div className="mb-6">
+                        <label className="text-xs text-indigo-300 mb-2 block">Select Voice</label>
+                        <select 
+                          value={selectedVoice} 
+                          onChange={(e) => setSelectedVoice(e.target.value)}
+                          className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm text-white"
+                        >
+                          {EDGE_TTS_VOICES.map(voice => (
+                            <option key={voice.name} value={voice.name} className="text-black">{voice.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <button 
+                        onClick={togglePodcast} 
+                        className="bg-white text-indigo-900 w-16 h-16 rounded-full flex items-center justify-center mx-auto hover:scale-105 transition shadow-lg"
+                      >
+                        {isPlaying ? <Square className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
                       </button>
+                      <p className="text-xs text-indigo-300 mt-4">
+                        {isPlaying ? 'Playing... Click to stop' : 'Click to play'}
+                      </p>
                     </div>
-                    <div className="mt-8 space-y-4">
-                      <h4 className="font-bold text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-800 pb-2">Transcript</h4>
-                      {currentStudySet.podcast?.split('\n').filter(l => l.trim()).map((line, i) => (
-                        <p key={i} className="text-gray-600 dark:text-gray-300 leading-relaxed">{line}</p>
-                      ))}
-                    </div>
+                    {/* Transcript is now hidden */}
                   </div>
                 )}
               </div>
@@ -916,78 +1315,75 @@ ${context}`;
         )}
       </main>
 
-      {/* Chat Panel */}
+      {/* Chat Panel - No backdrop blur/dimming */}
       {chatOpen && (
-        <>
-          <div onClick={() => setChatOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 backdrop-blur-sm" />
-          <div className="fixed right-0 top-0 bottom-0 w-full md:w-[420px] bg-white dark:bg-gray-800 shadow-2xl z-50 flex flex-col border-l border-gray-100 dark:border-gray-700">
-            <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-white dark:bg-gray-800 shadow-sm z-10">
-              <div className="flex items-center gap-3">
-                <img src="/hazelnote_tutor.png" className="w-10 h-10 rounded-full object-cover border-2 border-green-100 bg-green-50" />
-                <div>
-                  <h3 className="font-extrabold text-gray-900 dark:text-white text-base">Professor Hazel</h3>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                    <span className="text-xs text-green-600 dark:text-green-400 font-bold">Online AI Tutor</span>
-                  </div>
+        <div className={`fixed right-0 top-0 bottom-0 w-full md:w-[420px] bg-gray-800 shadow-2xl z-50 flex flex-col border-l border-gray-700 transition-transform duration-300 ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800 shadow-sm z-10">
+            <div className="flex items-center gap-3">
+              <img src="/hazelnote_tutor.png" className="w-10 h-10 rounded-full object-cover border-2 border-green-500 bg-green-900/30" />
+              <div>
+                <h3 className="font-extrabold text-white text-base">Professor Hazel</h3>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  <span className="text-xs text-green-400 font-bold">Online AI Tutor</span>
                 </div>
               </div>
-              <button onClick={() => setChatOpen(false)} className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition">
-                <X className="w-5 h-5" />
+            </div>
+            <button onClick={handleCloseChat} className="p-2 text-gray-400 hover:bg-gray-700 rounded-full transition">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-900 flex flex-col">
+            {chatMessages.map((msg, i) => (
+              <div key={i} className={`flex gap-3 max-w-[90%] animate-slide-in ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}>
+                {msg.role === 'ai' ? (
+                  <img src="/hazelnote_tutor.png" className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-white border border-gray-600" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold">U</div>
+                )}
+                <div className={`p-3 text-sm rounded-2xl ${msg.role === 'ai' ? 'bg-gray-800 border border-gray-700 rounded-tl-sm shadow-sm text-gray-200' : 'bg-green-500 text-white rounded-tr-sm shadow-sm'}`} dangerouslySetInnerHTML={{ __html: msg.text }} />
+              </div>
+            ))}
+          </div>
+          <div className="p-4 bg-gray-800 border-t border-gray-700 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
+            <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+              <button onClick={() => { setChatInput('Please rewrite the main concepts of these notes to make them clearer and easier to understand.'); }} className="whitespace-nowrap px-4 py-1.5 bg-blue-900/30 text-blue-400 text-xs font-bold rounded-full border border-blue-800 hover:bg-blue-900/50 transition">Rewrite Notes</button>
+              <button onClick={() => { setChatInput('Shorten these notes into a brief, easy-to-read bulleted summary.'); }} className="whitespace-nowrap px-4 py-1.5 bg-green-900/30 text-green-400 text-xs font-bold rounded-full border border-green-800 hover:bg-green-900/50 transition">Shorten</button>
+              <button onClick={() => { setChatInput('Expand on the key concepts in these notes and provide more detailed explanations.'); }} className="whitespace-nowrap px-4 py-1.5 bg-purple-900/30 text-purple-400 text-xs font-bold rounded-full border border-purple-800 hover:bg-purple-900/50 transition">Expand Concepts</button>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
+                className="flex-1 border border-gray-600 bg-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 focus:bg-gray-600 transition font-medium"
+                placeholder="Ask a question about the notes..."
+              />
+              <button onClick={sendChatMessage} className="bg-green-500 text-white p-3 rounded-xl hover:bg-green-600 transition shadow-md">
+                <Send className="w-5 h-5" />
               </button>
             </div>
-            <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-50/50 dark:bg-gray-900 flex flex-col">
-              {chatMessages.map((msg, i) => (
-                <div key={i} className={`flex gap-3 max-w-[90%] animate-slide-in ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}>
-                  {msg.role === 'ai' ? (
-                    <img src="/hazelnote_tutor.png" className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-white border border-gray-200" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold">U</div>
-                  )}
-                  <div className={`p-3 text-sm rounded-2xl ${msg.role === 'ai' ? 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-tl-sm shadow-sm text-gray-700 dark:text-gray-200' : 'bg-green-500 text-white rounded-tr-sm shadow-sm'}`} dangerouslySetInnerHTML={{ __html: msg.text }} />
-                </div>
-              ))}
-            </div>
-            <div className="p-4 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-              <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
-                <button onClick={() => { setChatInput('Please rewrite the main concepts of these notes to make them clearer and easier to understand.'); }} className="whitespace-nowrap px-4 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-xs font-bold rounded-full border border-blue-100 dark:border-blue-800 hover:bg-blue-100 transition">Rewrite Notes</button>
-                <button onClick={() => { setChatInput('Shorten these notes into a brief, easy-to-read bulleted summary.'); }} className="whitespace-nowrap px-4 py-1.5 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-bold rounded-full border border-green-100 dark:border-green-800 hover:bg-green-100 transition">Shorten</button>
-                <button onClick={() => { setChatInput('Expand on the key concepts in these notes and provide more detailed explanations.'); }} className="whitespace-nowrap px-4 py-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-xs font-bold rounded-full border border-purple-100 dark:border-purple-800 hover:bg-purple-100 transition">Expand Concepts</button>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
-                  className="flex-1 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 dark:text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 focus:bg-white transition font-medium"
-                  placeholder="Ask a question about the notes..."
-                />
-                <button onClick={sendChatMessage} className="bg-green-500 text-white p-3 rounded-xl hover:bg-green-600 transition shadow-md">
-                  <Send className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* Translate Modal */}
       {translateModalOpen && (
         <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-center justify-center backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-[32px] w-full max-w-md shadow-2xl">
-            <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
-              <h3 className="font-extrabold text-xl text-gray-900 dark:text-white flex items-center gap-2">
-                <Languages className="text-blue-500" /> Translate Notes
+          <div className="bg-gray-800 rounded-[32px] w-full max-w-md shadow-2xl border border-gray-700">
+            <div className="p-6 border-b border-gray-700 flex justify-between items-center">
+              <h3 className="font-extrabold text-xl text-white flex items-center gap-2">
+                <Languages className="text-blue-400" /> Translate Notes
               </h3>
-              <button onClick={() => setTranslateModalOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-500">
+              <button onClick={() => setTranslateModalOpen(false)} className="p-2 hover:bg-gray-700 rounded-full text-gray-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Translate to:</label>
-                <select id="translate-language" className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 bg-gray-50 dark:bg-gray-900 font-medium text-gray-800 dark:text-gray-200">
+                <label className="block text-sm font-bold text-gray-300 mb-2">Translate to:</label>
+                <select id="translate-language" className="w-full border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 bg-gray-700 font-medium text-white">
                   <option value="Urdu">اردو — Urdu</option>
                   <option value="Arabic">عربي — Arabic</option>
                   <option value="French">Français — French</option>
@@ -1005,24 +1401,24 @@ ${context}`;
 
       {/* Go Pro Modal */}
       {goProModalOpen && (
-        <div className="fixed inset-0 bg-gray-900/70 z-50 flex items-center justify-center backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-br from-amber-400 via-orange-500 to-red-500 p-8 text-white text-center">
-              <div className="text-5xl mb-3">⚡</div>
-              <h2 className="text-3xl font-extrabold mb-2">HazelNote Pro</h2>
-              <p className="opacity-90 text-sm">You have reached your free tier limit!</p>
+        <div className="fixed inset-0 bg-gray-900/80 z-50 flex items-center justify-center backdrop-blur-sm p-4">
+          <div className="bg-gray-800 rounded-[32px] w-full max-w-md shadow-2xl border border-gray-700 p-8 text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Sparkles className="w-8 h-8 text-white" />
             </div>
-            <div className="p-8">
-              <div className="text-center mb-6">
-                <span className="text-4xl font-extrabold text-gray-900 dark:text-white">$6</span>
-                <span className="text-gray-500 font-medium">/month</span>
-              </div>
-              <Link href="/pricing/" className="block text-center w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold text-lg rounded-2xl hover:shadow-xl transition-all hover:scale-[1.02]">
-                View Plans →
-              </Link>
-              <button onClick={() => setGoProModalOpen(false)} className="w-full py-3 mt-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-sm">
-                Maybe later
+            <h3 className="text-2xl font-extrabold text-white mb-3">Upgrade to Pro</h3>
+            <p className="text-gray-400 mb-6">
+              {tier === 'free' && stats.monthlySets?.[getCurrentMonth()] >= 2 
+                ? "You've reached your monthly limit of 2 study sets. Upgrade to Pro for unlimited access!"
+                : "Unlock unlimited study sets, advanced editing, device sync, and more with Pro!"}
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setGoProModalOpen(false)} className="flex-1 py-3 bg-gray-700 text-white rounded-xl font-bold hover:bg-gray-600 transition">
+                Maybe Later
               </button>
+              <Link href="/pricing/" onClick={() => setGoProModalOpen(false)} className="flex-1 py-3 bg-gradient-to-br from-green-500 to-blue-500 text-white rounded-xl font-bold hover:opacity-90 transition">
+                View Pro Plans
+              </Link>
             </div>
           </div>
         </div>
