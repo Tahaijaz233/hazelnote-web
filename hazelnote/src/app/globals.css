@@ -14,8 +14,8 @@ html {
 }
 
 body {
-  background-color: #F9FAFB;
-  color: #111827;
+  background-color: #0F172A;
+  color: #E2E8F0;
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -30,10 +30,11 @@ body {
 
 /* Glass card */
 .glass-card {
-  background: white;
+  background: rgba(30, 41, 59, 0.7);
   border-radius: 24px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.03), 0 1px 3px rgba(0,0,0,.02);
-  border: 1px solid #F3F4F6;
+  box-shadow: 0 4px 20px rgba(0,0,0,.2);
+  border: 1px solid #334155;
+  backdrop-filter: blur(10px);
 }
 
 /* Button primary */
@@ -76,19 +77,19 @@ body {
   gap: 12px;
   padding: 12px 16px;
   border-radius: 12px;
-  color: #4B5563;
+  color: #94A3B8;
   font-weight: 500;
   transition: all 0.2s;
 }
 
 .sidebar-item:hover {
-  background-color: #F3F4F6;
-  color: #111827;
+  background-color: #334155;
+  color: #E2E8F0;
 }
 
 .sidebar-item.active {
-  background-color: #ECFDF5;
-  color: #059669;
+  background-color: #064E3B;
+  color: #34D399;
 }
 
 /* Flip cards */
@@ -124,45 +125,46 @@ body {
   justify-content: center;
   padding: 2rem;
   border-radius: 20px;
-  box-shadow: 0 4px 15px rgba(0,0,0,.05);
-  border: 1px solid #F3F4F6;
+  box-shadow: 0 4px 15px rgba(0,0,0,.2);
   overflow-y: auto;
 }
 
 .flip-card-front {
-  background: white;
-  color: #111827;
+  background: #1E293B;
+  color: #E2E8F0;
   font-weight: 600;
   font-size: 1.125rem;
   text-align: center;
+  border: 1px solid #334155;
 }
 
 .flip-card-back {
-  background: #10B981;
+  background: #059669;
   color: white;
   transform: rotateY(180deg);
   text-align: center;
   font-size: 1.05rem;
+  border: 1px solid #047857;
 }
 
 /* Prose / Notes */
 .prose strong {
-  color: #059669;
+  color: #34D399;
   font-weight: 700;
 }
 
 .prose h2 {
-  color: #111827;
+  color: #F8FAFC;
   font-size: 1.5rem;
   font-weight: 700;
   margin-top: 2rem;
   margin-bottom: 1rem;
-  border-bottom: 2px solid #F3F4F6;
+  border-bottom: 2px solid #334155;
   padding-bottom: 0.5rem;
 }
 
 .prose h3 {
-  color: #374151;
+  color: #F1F5F9;
   font-size: 1.25rem;
   font-weight: 600;
   margin-top: 1.5rem;
@@ -173,12 +175,12 @@ body {
   list-style-type: disc;
   padding-left: 1.5rem;
   margin-bottom: 1rem;
-  color: #4B5563;
+  color: #CBD5E1;
 }
 
 .prose p {
   margin-bottom: 1rem;
-  color: #4B5563;
+  color: #CBD5E1;
   line-height: 1.7;
 }
 
@@ -189,25 +191,59 @@ body {
   margin-bottom: 1.5rem;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
   display: block;
   overflow-x: auto;
 }
 
 .prose th {
-  background-color: #F3F4F6;
+  background-color: #0F172A;
   text-align: left;
   padding: 12px 16px;
   font-weight: 600;
-  color: #374151;
+  color: #F8FAFC;
   white-space: nowrap;
+  border-bottom: 2px solid #334155;
 }
 
 .prose td {
   padding: 12px 16px;
-  border-top: 1px solid #E5E7EB;
-  color: #4B5563;
-  background: white;
+  border-top: 1px solid #334155;
+  color: #CBD5E1;
+  background: #1E293B;
+}
+
+/* KaTeX Math Styling */
+.katex {
+  font-size: 1.1em;
+}
+
+.katex-display {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Note Editor Styles */
+.note-editor-content {
+  min-height: 400px;
+  outline: none;
+}
+
+.note-editor-content:focus {
+  outline: none;
+}
+
+.note-editor-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.note-editor-content td,
+.note-editor-content th {
+  border: 1px solid #334155;
+  padding: 8px 12px;
 }
 
 /* Scrollbar */
@@ -221,12 +257,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #E5E7EB;
+  background: #334155;
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #D1D5DB;
+  background: #475569;
 }
 
 /* Animations */
@@ -243,11 +279,38 @@ body {
   filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.6));
 }
 
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
+  50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.8); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
 /* Dark mode toggle */
 #dark-mode-toggle {
   width: 36px;
   height: 18px;
-  background: #cbd5e1;
+  background: #334155;
   border-radius: 9999px;
   position: relative;
   transition: background-color 0.3s ease;
@@ -293,68 +356,6 @@ body {
     border: none;
     padding: 0 !important;
   }
-}
-
-/* Dark mode styles */
-.dark body {
-  background-color: #0F172A;
-  color: #E2E8F0;
-}
-
-.dark .glass-card {
-  background: #1E293B;
-  border-color: #334155;
-  box-shadow: 0 4px 20px rgba(0,0,0,.3);
-}
-
-.dark .sidebar-item {
-  color: #94A3B8;
-}
-
-.dark .sidebar-item:hover {
-  background-color: #334155;
-  color: #E2E8F0;
-}
-
-.dark .sidebar-item.active {
-  background-color: #064E3B;
-  color: #34D399;
-}
-
-.dark .flip-card-front {
-  background: #1E293B !important;
-  color: #E2E8F0 !important;
-  border-color: #334155 !important;
-}
-
-.dark .prose p,
-.dark .prose ul {
-  color: #E2E8F0;
-}
-
-.dark .prose h2 {
-  color: #F8FAFC;
-  border-color: #334155;
-}
-
-.dark .prose h3 {
-  color: #F1F5F9;
-}
-
-.dark .prose strong {
-  color: #34D399;
-}
-
-.dark .prose th {
-  background-color: #0F172A;
-  color: #F8FAFC;
-  border-bottom: 2px solid #334155;
-}
-
-.dark .prose td {
-  background: #1E293B;
-  color: #CBD5E1;
-  border-color: #334155;
 }
 
 /* Responsive */
