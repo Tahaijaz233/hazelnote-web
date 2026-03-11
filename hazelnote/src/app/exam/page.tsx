@@ -97,22 +97,21 @@ export default function Exam() {
     const studySet = studyHistory.find(s => s.id === selectedStudySet);
     if (!studySet) return;
 
-    // Call API to generate exam questions
     try {
       const prompt = `Based on the following study material, create ${questionCount} ${questionType} questions at ${difficulty} difficulty level.
       
 Study Material:
 ${studySet.parts[2]}
 
-Format each question as:
-QUESTION: [question text]
+Format each question exactly as follows:
+Q: [question text]
 A) [option A]
 B) [option B]
 C) [option C]
 D) [option D]
-ANSWER: [A/B/C/D]
+Ans: [A/B/C/D]
 
-Generate exactly ${questionCount} questions.`;
+Generate exactly ${questionCount} questions. DO NOT USE BOLD TEXT FOR LABELS.`;
 
       const response = await fetch('/api/gemini/', {
         method: 'POST',
@@ -123,19 +122,34 @@ Generate exactly ${questionCount} questions.`;
       const data = await response.json();
       
       if (data.result) {
-        // Robust markdown-stripped parsing
-        const cleanText = data.result.replace(/\*\*/g, '');
-        const regex = /(?:QUESTION|Q):\s*([\s\S]*?)\s*A\)\s*([\s\S]*?)\s*B\)\s*([\s\S]*?)\s*C\)\s*([\s\S]*?)\s*D\)\s*([\s\S]*?)\s*(?:ANSWER|A):\s*([A-D])/gi;
+        // Robust manual parsing matching the dashboard logic
+        const cleanText = data.result.replace(/\*\*/g, '').trim();
+        const lines = cleanText.split('\n');
         const questions: any[] = [];
-        let match;
-        
-        while ((match = regex.exec(cleanText)) !== null) {
-          questions.push({
-            question: match[1].trim(),
-            options: [match[2].trim(), match[3].trim(), match[4].trim(), match[5].trim()],
-            answer: match[6].trim().toUpperCase(),
-          });
+        let currentQ = { question: '', options: [] as string[], answer: '' };
+        let state = 'search';
+
+        for (let line of lines) {
+          line = line.trim();
+          if (!line) continue;
+          
+          if (/^(?:Q|Question)(?:\s*\d*)?[:.]\s*(.*)/i.test(line)) {
+            if (currentQ.question && currentQ.options.length >= 2 && currentQ.answer) questions.push({...currentQ});
+            currentQ = { question: line.replace(/^(?:Q|Question)(?:\s*\d*)?[:.]\s*/i, ''), options: [], answer: '' };
+            state = 'q';
+          } else if (/^[A-D][).]\s*/i.test(line)) {
+            currentQ.options.push(line.replace(/^[A-D][).]\s*/i, ''));
+            state = 'opt';
+          } else if (/^(?:Ans|Answer)(?:\s*\d*)?[:.]\s*([A-D])/i.test(line)) {
+            const match = line.match(/^(?:Ans|Answer)(?:\s*\d*)?[:.]\s*([A-D])/i);
+            if (match) currentQ.answer = match[1].toUpperCase();
+            state = 'ans';
+          } else {
+            if (state === 'q') currentQ.question += '\n' + line;
+            else if (state === 'opt' && currentQ.options.length > 0) currentQ.options[currentQ.options.length-1] += '\n' + line;
+          }
         }
+        if (currentQ.question && currentQ.options.length >= 2 && currentQ.answer) questions.push({...currentQ});
 
         if (questions.length === 0) {
           alert("AI formatted the questions incorrectly. Please try again.");
