@@ -28,7 +28,7 @@ export default function Profile() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true); // Default to true as per new requirement
   const [stats, setStats] = useState<any>({ streak: 0, notes: 0, monthlySets: {} });
   const [tier, setTier] = useState<'free' | 'pro'>('free');
 
@@ -42,12 +42,23 @@ export default function Profile() {
           const p = snap.data();
           setProfile(p);
           setTier(p.is_pro ? 'pro' : 'free');
+          
+          if (p.stats) setStats(p.stats);
         }
       }
     });
 
     setStats(safeParseJSON('hz_stats', { streak: 0, notes: 0, monthlySets: {} }));
-    setDarkMode(document.documentElement.classList.contains('dark'));
+    
+    // Check local storage or fallback to our new default true state
+    const isDark = localStorage.getItem('hz_dark_mode');
+    if (isDark !== null) {
+        setDarkMode(isDark === 'true');
+        if (isDark === 'true') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+    } else {
+        document.documentElement.classList.add('dark');
+    }
 
     return () => unsubscribe();
   }, []);
