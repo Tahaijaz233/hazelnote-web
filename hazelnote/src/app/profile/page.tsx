@@ -91,7 +91,6 @@ export default function Profile() {
   const monthlyCount = stats.monthlySets?.[month] || 0;
   const usagePercentage = tier === 'free' ? Math.min((monthlyCount / 2) * 100, 100) : 100;
 
-  // Sidebar component
   const Sidebar = () => (
     <aside className={`w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
       <div className="p-6 flex items-center justify-between">
@@ -140,7 +139,6 @@ export default function Profile() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-slate-900">
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm" />
       )}
@@ -148,7 +146,6 @@ export default function Profile() {
       <Sidebar />
 
       <main className="flex-1 h-full overflow-y-auto pb-12 relative">
-        {/* Desktop hamburger menu button */}
         <button 
           onClick={() => setSidebarOpen(true)} 
           className="hidden md:flex fixed top-4 left-4 z-30 p-2 bg-gray-800/80 backdrop-blur border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition items-center gap-2"
@@ -157,7 +154,6 @@ export default function Profile() {
           <span className="text-sm font-medium">Menu</span>
         </button>
 
-        {/* Mobile header */}
         <div className="md:hidden bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-3 sticky top-0 z-30">
           <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
             <Menu className="w-6 h-6" />
@@ -175,7 +171,8 @@ export default function Profile() {
             </div>
             <div>
               <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">{user?.displayName || 'My Profile'}</h2>
-              <div className="flex items-center gap-2 mt-1">
+              {user?.uid && <div className="text-xs text-gray-500 mt-1 font-mono tracking-wide">ID: {user.uid}</div>}
+              <div className="flex items-center gap-2 mt-2">
                 <span className="text-xs font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full uppercase tracking-wider border border-green-200">
                   {tier === 'pro' ? 'Pro Plan' : 'Free Plan'}
                 </span>
@@ -184,7 +181,6 @@ export default function Profile() {
           </header>
 
           <div className="space-y-6">
-            {/* Usage Statistics */}
             {tier === 'free' && (
               <div className="glass-card p-6 mb-6 dark:bg-gray-800 dark:border-gray-700">
                 <h3 className="text-xl font-bold mb-4 border-b border-gray-100 dark:border-gray-700 pb-2 flex items-center gap-2">
@@ -201,7 +197,6 @@ export default function Profile() {
               </div>
             )}
 
-            {/* Settings */}
             <div className="glass-card p-6 mb-6 dark:bg-gray-800 dark:border-gray-700">
               <h3 className="text-xl font-bold mb-4 border-b border-gray-100 dark:border-gray-700 pb-2 flex items-center gap-2">
                 <Settings className="w-5 h-5 text-gray-600" /> App Settings
@@ -217,7 +212,6 @@ export default function Profile() {
               </div>
             </div>
 
-            {/* Billing */}
             <section className="glass-card p-6 border border-green-100 dark:border-green-800 dark:bg-gray-800">
               <h3 className="text-xl font-extrabold text-gray-900 dark:text-white mb-4 text-left flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-green-500" /> Subscription & Billing
@@ -229,7 +223,6 @@ export default function Profile() {
               </div>
             </section>
 
-            {/* Danger Zone */}
             <div className="glass-card p-6 border border-red-100 bg-red-50/10 dark:bg-gray-800 dark:border-red-900">
               <h3 className="text-xl font-bold mb-4 border-b border-red-100 dark:border-red-900 pb-2 text-red-600 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5" /> Danger Zone
