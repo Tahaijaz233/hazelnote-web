@@ -46,7 +46,9 @@ import {
   ChevronDown,
   Edit2,
   FolderPlus,
-  Network
+  Network,
+  Paperclip,
+  Check
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
@@ -61,6 +63,8 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
   const [savedRange, setSavedRange] = useState<Range | null>(null);
+  const [activeColor, setActiveColor] = useState<string | null>(null);
+  const [activeBgColor, setActiveBgColor] = useState<string | null>(null);
   
   const colors = ['#000000', '#FFFFFF', '#EF4444', '#22C55E', '#3B82F6', '#F59E0B', '#A855F7', '#EC4899'];
   const highlights = ['transparent', '#FEF08A', '#BBF7D0', '#BFDBFE', '#FBCFE8', '#FED7AA', '#E9D5FF'];
@@ -74,9 +78,8 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   };
 
   const restoreSelection = () => {
-    // Explicitly focus the editor div before restoring selection if needed
     const editor = document.getElementById('active-pro-editor');
-    if (editor) editor.focus();
+    if (editor && document.activeElement !== editor) editor.focus();
     
     if (savedRange) {
       const sel = window.getSelection();
@@ -137,21 +140,20 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   };
 
   return (
-    <div className="sticky top-4 md:top-4 z-40 bg-gray-900/95 backdrop-blur-md border border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-2xl rounded-2xl mb-4 transition-all"
+    <div className="sticky top-20 z-[60] bg-gray-900/95 backdrop-blur-md border border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-2xl rounded-2xl mb-6 transition-all"
          onMouseDown={(e) => {
-             // Prevent losing focus on editor when clicking toolbar background
              if(e.target === e.currentTarget) e.preventDefault()
          }}>
       
       {/* Font Family */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button onClick={(e) => { e.preventDefault(); togglePopup('fontFamily'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition text-sm font-bold flex items-center gap-1" title="Font Family">
+        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('fontFamily'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition text-sm font-bold flex items-center gap-1" title="Font Family">
           Font <ChevronDown className="w-3 h-3" />
         </button>
         {activePopup === 'fontFamily' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[140px]">
             {fonts.map(font => (
-              <button key={font} className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" style={{ fontFamily: font }} onClick={(e) => { e.preventDefault(); executeFormat('fontName', font); }}>{font}</button>
+              <button key={font} className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" style={{ fontFamily: font }} onMouseDown={(e) => { e.preventDefault(); executeFormat('fontName', font); }}>{font}</button>
             ))}
           </div>
         )}
@@ -159,13 +161,13 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
 
       {/* Font Size */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button onClick={(e) => { e.preventDefault(); togglePopup('font'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Font Size"><Type className="w-4 h-4" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('font'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Font Size"><Type className="w-4 h-4" /></button>
         {activePopup === 'font' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[120px]">
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={(e) => { e.preventDefault(); executeFormat('fontSize', '1'); }}>Small</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={(e) => { e.preventDefault(); executeFormat('fontSize', '3'); }}>Normal</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={(e) => { e.preventDefault(); executeFormat('fontSize', '5'); }}>Large</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={(e) => { e.preventDefault(); executeFormat('fontSize', '7'); }}>Huge</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); executeFormat('fontSize', '1'); }}>Small</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); executeFormat('fontSize', '3'); }}>Normal</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); executeFormat('fontSize', '5'); }}>Large</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); executeFormat('fontSize', '7'); }}>Huge</button>
           </div>
         )}
       </div>
@@ -176,22 +178,30 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
         <button onMouseDown={(e) => { e.preventDefault(); executeFormat('italic'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Italic"><Italic className="w-4 h-4" /></button>
         <button onMouseDown={(e) => { e.preventDefault(); executeFormat('underline'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Underline"><Underline className="w-4 h-4" /></button>
         
-        <button onClick={(e) => { e.preventDefault(); togglePopup('color'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Text Color"><Palette className="w-4 h-4" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('color'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Text Color"><Palette className="w-4 h-4" /></button>
         {activePopup === 'color' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-3 shadow-2xl flex flex-col gap-3 z-50">
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Text Color</p>
             <div className="grid grid-cols-4 gap-2">
-              {colors.map(c => <button key={c} onMouseDown={(e) => { e.preventDefault(); executeFormat('foreColor', c); }} className="w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition" style={{ backgroundColor: c }} />)}
+              {colors.map(c => (
+                <button key={c} onMouseDown={(e) => { e.preventDefault(); setActiveColor(c); executeFormat('foreColor', c); }} className="w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition flex items-center justify-center" style={{ backgroundColor: c }}>
+                  {activeColor === c && <Check className={`w-3 h-3 ${c === '#FFFFFF' ? 'text-black' : 'text-white'}`} />}
+                </button>
+              ))}
             </div>
           </div>
         )}
 
-        <button onClick={(e) => { e.preventDefault(); togglePopup('highlight'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Highlight Color"><Highlighter className="w-4 h-4" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('highlight'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Highlight Color"><Highlighter className="w-4 h-4" /></button>
         {activePopup === 'highlight' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-3 shadow-2xl flex flex-col gap-3 z-50">
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Highlight Color</p>
             <div className="grid grid-cols-4 gap-2">
-              {highlights.map(c => <button key={c} onMouseDown={(e) => { e.preventDefault(); executeFormat('backColor', c); }} className={`w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition`} style={{ backgroundColor: c === 'transparent' ? '#374151' : c }} title={c === 'transparent' ? 'Clear Highlight' : c} />)}
+              {highlights.map(c => (
+                <button key={c} onMouseDown={(e) => { e.preventDefault(); setActiveBgColor(c); executeFormat('backColor', c); }} className={`w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition flex items-center justify-center`} style={{ backgroundColor: c === 'transparent' ? '#374151' : c }} title={c === 'transparent' ? 'Clear Highlight' : c}>
+                  {activeBgColor === c && <Check className="w-3 h-3 text-black" />}
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -199,16 +209,16 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
 
       {/* Advanced Inserts */}
       <div className="flex items-center gap-1 relative">
-        <button onClick={(e) => { e.preventDefault(); togglePopup('math'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><FunctionSquare className="w-4 h-4 text-blue-400" /> Math</button>
+        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('math'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><FunctionSquare className="w-4 h-4 text-blue-400" /> Math</button>
         {activePopup === 'math' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[280px]">
             <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Enter LaTeX Equation</label>
             <input autoFocus value={mathInput} onChange={e=>setMathInput(e.target.value)} onKeyDown={(e)=>{ if(e.key==='Enter') { e.preventDefault(); handleMathSubmit(); } }} className="bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" placeholder="e.g. E = mc^2" />
-            <button onClick={(e) => { e.preventDefault(); handleMathSubmit(); }} className="bg-blue-500 text-white text-sm py-2 rounded-lg font-bold">Insert Equation</button>
+            <button onMouseDown={(e) => { e.preventDefault(); handleMathSubmit(); }} className="bg-blue-500 text-white text-sm py-2 rounded-lg font-bold">Insert Equation</button>
           </div>
         )}
 
-        <button onClick={(e) => { e.preventDefault(); togglePopup('table'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><TableIcon className="w-4 h-4 text-indigo-400" /> Table</button>
+        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('table'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><TableIcon className="w-4 h-4 text-indigo-400" /> Table</button>
         {activePopup === 'table' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[220px]">
              <div className="flex justify-between gap-4">
@@ -221,11 +231,11 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
                   <input type="number" min="1" max="10" value={tableCols} onChange={e=>setTableCols(Number(e.target.value))} className="w-full bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" />
                </div>
              </div>
-             <button onClick={(e) => { e.preventDefault(); handleInsertTable(); }} className="bg-indigo-500 text-white text-sm py-2 rounded-lg font-bold mt-2">Insert Table</button>
+             <button onMouseDown={(e) => { e.preventDefault(); handleInsertTable(); }} className="bg-indigo-500 text-white text-sm py-2 rounded-lg font-bold mt-2">Insert Table</button>
           </div>
         )}
 
-        <button onClick={(e) => { e.preventDefault(); togglePopup('image'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><ImageIcon className="w-4 h-4 text-green-400" /> Image</button>
+        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('image'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><ImageIcon className="w-4 h-4 text-green-400" /> Image</button>
         {activePopup === 'image' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[220px]">
             <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Upload Local Image</label>
@@ -271,9 +281,11 @@ export default function Dashboard() {
 
   const [tier, setTier] = useState<'free' | 'pro'>('free');
   
+  // Chat state
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([]);
   const [chatInput, setChatInput] = useState('');
+  const [chatFile, setChatFile] = useState<File | null>(null);
   
   const [isEditing, setIsEditing] = useState(false);
   const [editedNotes, setEditedNotes] = useState('');
@@ -289,6 +301,7 @@ export default function Dashboard() {
   // Podcast State
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const [podcastProgress, setPodcastProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
@@ -296,6 +309,7 @@ export default function Dashboard() {
   
   // Audio Ask Professor
   const [askModalOpen, setAskModalOpen] = useState(false);
+  const isAskModalOpenRef = useRef(false);
   const [isAskRecording, setIsAskRecording] = useState(false);
   const [askResponse, setAskResponse] = useState('');
   const [isProfSpeaking, setIsProfSpeaking] = useState(false);
@@ -570,7 +584,6 @@ export default function Dashboard() {
 
     const flashcardCount = tier === 'pro' ? 15 : 5;
     const quizCount = tier === 'pro' ? 10 : 3;
-    const maxWords = tier === 'pro' ? 2200 : 300;
 
     try {
       if (inputMode === 'link') {
@@ -583,9 +596,9 @@ export default function Dashboard() {
 
       const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===" on a new line. Do not bold the SPLIT text.
 
-Section 1: SHORT TITLE (4-8 words max)
+Section 1: SHORT TITLE (4-8 words max, DO NOT include labels like "Title:" or "Short Title:")
 ===SPLIT===
-Section 2: EXECUTIVE SUMMARY (exactly 250 words)
+Section 2: EXECUTIVE SUMMARY (100-150 words, DO NOT include labels like "Executive Summary:")
 ===SPLIT===
 Section 3: DETAILED NOTES in Markdown format. Use tables and bold text. Inline math $formula$, block $$formula$$.
 ===SPLIT===
@@ -609,11 +622,13 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       let parts = mainResult.split(/===SPLIT===/i).map((p: string) => p.trim());
       while (parts.length < 5) parts.push('Content generation incomplete.');
 
-      let generatedTitle = parts[0]?.replace(/^(Title:|Here is.*?|Study Set:?|\*\*.*?:\*\*|Section 1:?)\s*/i, '').replace(/[*#]/g, '').trim().substring(0, 100) || `Study Set - ${new Date().toLocaleDateString()}`;
-      let summaryClean = (parts[1] || '').replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*)/is, '').trim();
+      let generatedTitle = parts[0]?.replace(/^(Title:|Here is.*?|Study Set:?|\*\*.*?:\*\*|Section 1:?|Short Title:?)\s*/i, '').replace(/[*#]/g, '').trim().substring(0, 100) || `Study Set - ${new Date().toLocaleDateString()}`;
+      let summaryClean = (parts[1] || '').replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*|Executive Summary:?)\s*/is, '').trim();
       parts[1] = summaryClean;
 
-      const podPrompt = `Convert this content into a teaching monologue for an audio podcast. Short sentences, conversational tone, plain text only. Limit the script strictly to approximately ${maxWords} words to fit a ${tier === 'pro' ? '15' : '2'}-minute audio format. Content: ${parts[1] || finalContext.substring(0, 3000)}`;
+      // Lower max words significantly to speed up TTS generation
+      const maxWords = tier === 'pro' ? 800 : 300;
+      const podPrompt = `Convert this content into a teaching monologue for an audio podcast. Short sentences, conversational tone, plain text only. Limit the script strictly to approximately ${maxWords} words to fit a ${tier === 'pro' ? '5' : '2'}-minute audio format. Content: ${parts[1] || finalContext.substring(0, 3000)}`;
       const podResult = await callLLM(podPrompt, '');
       const cleanPodResult = podResult.replace(/\*[^*]*\*/g, '').replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
 
@@ -680,25 +695,29 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
      try {
          const prompt = `You are an expert tutor. I am providing existing study notes and new source material.
          Integrate the relevant information from the new source material into the existing notes seamlessly, adding new sections or expanding existing ones where appropriate.
-         Return ONLY the updated comprehensive notes in Markdown format (use tables, bold text, inline math $formula$, block $$formula$$).
-         Do not include any other conversational text or separators before or after the notes.
-
-         EXISTING NOTES:
-         ${currentStudySet.parts[2]}
-
-         NEW SOURCE MATERIAL:
-         ${finalContext}
+         Return ONLY the output in this EXACT format:
+         TITLE: [New Updated Title reflecting the combined notes (4-8 words max)]
+         ===SPLIT===
+         [Updated Comprehensive Notes in Markdown format]
          `;
 
-         const result = await callLLM(prompt, "", contextInputMode === 'pdf' ? contextPdfFiles : undefined);
+         const result = await callLLM(prompt, finalContext, contextInputMode === 'pdf' ? contextPdfFiles : undefined);
          
-         // Clean any markdown backticks if AI added them
-         const cleanNotes = result.replace(/^```[a-z]*\n/im, '').replace(/\n```$/m, '').trim();
+         const parts = result.split('===SPLIT===');
+         let newTitle = currentStudySet.title;
+         let cleanNotes = result;
+         
+         if (parts.length > 1) {
+             newTitle = parts[0].replace(/TITLE:/i, '').replace(/\*/g, '').trim();
+             cleanNotes = parts[1].replace(/^```[a-z]*\n/im, '').replace(/\n```$/m, '').trim();
+         } else {
+             cleanNotes = parts[0].replace(/^```[a-z]*\n/im, '').replace(/\n```$/m, '').trim();
+         }
 
          const newParts = [...currentStudySet.parts];
          newParts[2] = cleanNotes;
          
-         const updatedSet = { ...currentStudySet, parts: newParts };
+         const updatedSet = { ...currentStudySet, title: newTitle, parts: newParts };
          setCurrentStudySet(updatedSet);
          
          const newHistory = studyHistory.map(s => s.id === updatedSet.id ? updatedSet : s);
@@ -711,7 +730,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
          setContextVoiceText('');
          setAddContextModalOpen(false);
          setIsAddingContextLoading(false);
-         alert("Context seamlessly integrated into your notes!");
+         alert("Context seamlessly integrated and title updated!");
      } catch (e: any) {
          setIsAddingContextLoading(false);
          alert("Error adding context: " + e.message);
@@ -821,6 +840,9 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     }
 
     setIsAudioLoading(true);
+    setPodcastProgress(0);
+    const progressInterval = setInterval(() => setPodcastProgress(p => p < 95 ? p + 2 : p), 600);
+
     try {
       const keyRes = await fetch('/api/gemini');
       const keyData = await keyRes.json();
@@ -862,13 +884,18 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       
       const wavBlob = pcmToWav(base64ToArrayBuffer(base64), 24000);
       const urlBlob = URL.createObjectURL(wavBlob);
+      
+      clearInterval(progressInterval);
+      setPodcastProgress(100);
+      
       setAudioUrl(urlBlob);
       setIsPlaying(true);
-      setTimeout(() => audioRef.current?.play(), 100);
+      setTimeout(() => audioRef.current?.play(), 200);
     } catch (e: any) {
+      clearInterval(progressInterval);
       alert("Audio Error: " + e.message);
     }
-    setIsAudioLoading(false);
+    setTimeout(() => setIsAudioLoading(false), 500);
   };
 
   const toggleAskRecording = async () => {
@@ -942,6 +969,10 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         if (audioBase64) {
             const wavBlob = pcmToWav(base64ToArrayBuffer(audioBase64), 24000);
             const urlBlob = URL.createObjectURL(wavBlob);
+            
+            // Immediately abort playing if the modal was closed while generating
+            if (!isAskModalOpenRef.current) return;
+
             if (!profPlaybackRef.current) {
                 profPlaybackRef.current = new Audio();
                 profPlaybackRef.current.onended = () => setIsProfSpeaking(false);
@@ -968,18 +999,27 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       audioRef.current.pause();
       setIsPlaying(false);
     }
+    isAskModalOpenRef.current = true;
     setAskModalOpen(true);
     setAskResponse('');
     stopProfSpeaking();
   };
 
   const sendChatMessage = async () => {
-    if (!chatInput.trim() || !currentStudySet) return;
+    if (!chatInput.trim() && !chatFile) return;
+    if (!currentStudySet) return;
     if (tier === 'free' && currentStudySet.chatCount >= 3) return setGoProModalOpen(true);
 
     const text = chatInput;
-    setChatMessages(prev => [...prev, { role: 'user', text }]);
+    const fileToSend = chatFile;
+    
     setChatInput('');
+    setChatFile(null);
+
+    setChatMessages(prev => [...prev, { 
+       role: 'user', 
+       text: text + (fileToSend ? `<div class="text-xs text-green-300 mt-1 font-medium bg-green-900/30 p-1.5 rounded inline-block">📎 ${fileToSend.name}</div>` : '') 
+    }]);
 
     if (tier === 'free') {
       const updatedSet = { ...currentStudySet, chatCount: (currentStudySet.chatCount || 0) + 1 };
@@ -992,7 +1032,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     setChatMessages(prev => [...prev, { role: 'ai', text: '<span class="animate-pulse">Thinking...</span>' }]);
     try {
       const prompt = `You are Professor Hazel, a helpful AI tutor. Answer based strictly on the material below:\n${currentStudySet.parts.join('\n')}`;
-      const response = await callLLM(prompt, text);
+      const response = await callLLM(prompt, text, fileToSend ? [fileToSend] : undefined);
       setChatMessages(prev => { const n = [...prev]; n[n.length - 1] = { role: 'ai', text: renderMarkdownWithMath(response) }; return n; });
     } catch (e: any) {
       setChatMessages(prev => { const n = [...prev]; n[n.length - 1] = { role: 'ai', text: `<span class="text-red-500">Error: ${e.message}</span>` }; return n; });
@@ -1333,7 +1373,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
             )}
             {inputMode === 'link' && (
               <div className="glass-card p-8 md:p-10 bg-gray-800/50 backdrop-blur-lg">
-                <input type="text" id="youtube-url-input" className="w-full border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 bg-gray-700 text-white" placeholder="Paste a YouTube URL here..." />
+                <input type="text" id="youtube-url-input" onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300)} className="w-full border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 bg-gray-700 text-white" placeholder="Paste a YouTube URL here..." />
               </div>
             )}
 
@@ -1363,17 +1403,17 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
               <button onClick={() => setCurrentView('dashboard')} className="text-gray-400 hover:text-white transition flex items-center gap-2 text-sm font-medium"><ArrowLeft className="w-4 h-4" /> Back</button>
             </div>
             
-            <div className="glass-card bg-gray-800/50 backdrop-blur-lg border-gray-700 relative">
-              <div className="border-b border-gray-700 bg-gray-800/50 p-6 md:px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-t-2xl">
+            <div className="glass-card bg-gray-800/50 backdrop-blur-lg border-gray-700 relative overflow-visible">
+              <div className="border-b border-gray-700 bg-gray-800/50 p-6 md:px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-t-[24px]">
                 <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">{currentStudySet.title}</h2>
                 <div className="flex flex-wrap gap-2 w-full md:w-auto">
                   <button onClick={() => window.print()} className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-gray-600"><Printer className="w-4 h-4" /> Export PDF</button>
                   <button onClick={() => setTranslateModalOpen(true)} className="text-sm bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-blue-800"><Languages className="w-4 h-4" /> Translate</button>
-                  <button onClick={() => { setSidebarCollapsed(true); setChatOpen(true); }} className="text-sm bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition shadow-md border border-green-600"><img src="/hazelnote_tutor.png" className="w-5 h-5 rounded-full object-cover bg-white border border-green-400" /> Chat with Professor Hazel</button>
+                  <button onClick={() => { setSidebarCollapsed(true); setChatOpen(true); }} className="text-sm bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition shadow-md border border-green-600"><img src="/hazelnote_tutor.png" className="w-5 h-5 rounded-full object-cover aspect-square bg-white border border-green-400" /> Chat with Professor Hazel</button>
                 </div>
               </div>
 
-              <div className="px-6 md:px-8 pt-8 -mb-4 bg-gradient-to-br from-[#0F172A] to-[#1E293B] z-10 relative">
+              <div className="px-6 md:px-8 pt-8 pb-4 bg-gradient-to-br from-[#0F172A] to-[#1E293B] z-10 relative">
                 <div className="inline-flex p-1.5 bg-gray-800 border border-gray-700 rounded-[20px] shadow-sm gap-1 overflow-x-auto max-w-full">
                   {(['notes', 'flashcards', 'quiz', 'podcast'] as const).map((tab) => (
                     <button key={tab} onClick={() => setCurrentTab(tab)} className={`text-sm px-5 py-2.5 rounded-xl font-bold transition-all ${currentTab === tab ? 'bg-green-500 text-white shadow-md transform scale-[1.02]' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}>
@@ -1383,7 +1423,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                 </div>
               </div>
 
-              <div className="p-6 md:p-8 min-h-[600px] bg-gradient-to-br from-[#0F172A] to-[#1E293B] study-content-area rounded-b-2xl">
+              <div className="p-6 md:p-8 min-h-[600px] bg-gradient-to-br from-[#0F172A] to-[#1E293B] study-content-area rounded-b-[24px]">
                 {currentTab === 'notes' && (
                   <div>
                     {tier === 'pro' && (
@@ -1409,15 +1449,16 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                             )}
                           </div>
                         </div>
-                        {isEditing && (
-                          <NoteEditorToolbar 
-                             onFormat={(cmd: string, val: string) => document.execCommand(cmd, false, val)} 
-                             onInsertHtml={(html: string) => document.execCommand('insertHTML', false, html)}
-                          />
-                        )}
                       </div>
                     )}
                     
+                    {isEditing && tier === 'pro' && (
+                      <NoteEditorToolbar 
+                         onFormat={(cmd: string, val: string) => document.execCommand(cmd, false, val)} 
+                         onInsertHtml={(html: string) => document.execCommand('insertHTML', false, html)}
+                      />
+                    )}
+
                     {isEditing && tier === 'pro' ? (
                       <div className="space-y-6">
                         <div className="bg-green-900/10 p-6 md:p-8 rounded-[24px] border-2 border-dashed border-green-500/40 relative"><div className="absolute top-0 right-0 bg-green-500/20 text-green-400 text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-[24px] uppercase tracking-wider">Editing Summary</div><div className="prose prose-lg max-w-none text-gray-200 focus:outline-none min-h-[100px] note-editor-content" contentEditable suppressContentEditableWarning onBlur={(e) => setEditedSummary(e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: editedSummary }} /></div>
@@ -1446,8 +1487,14 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                         {isPlaying && <div className="absolute inset-0 rounded-full border-4 border-white/30 animate-ping"></div>}
                       </div>
                       <h3 className="text-3xl font-extrabold mb-2">Audio Lesson</h3>
-                      <p className="text-indigo-200 mb-8 max-w-md mx-auto text-sm">Listen to a custom AI-generated teaching monologue based on your notes. ({tier === 'pro' ? 'Max 15 Mins' : 'Max 2 Mins'})</p>
+                      <p className="text-indigo-200 mb-6 max-w-md mx-auto text-sm">Listen to a custom AI-generated teaching monologue based on your notes. ({tier === 'pro' ? 'Max 5 Mins' : 'Max 2 Mins'})</p>
                       
+                      {isAudioLoading && (
+                         <div className="w-full bg-indigo-950/50 rounded-full h-2 mb-6 max-w-xs mx-auto overflow-hidden">
+                            <div className="bg-white h-2 transition-all duration-300" style={{ width: `${podcastProgress}%` }}></div>
+                         </div>
+                      )}
+
                       <div className="flex flex-col items-center gap-6">
                         <audio 
                           ref={audioRef} 
@@ -1497,7 +1544,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         <div className={`fixed right-0 top-0 bottom-0 w-full md:w-[420px] bg-gray-800 shadow-2xl z-50 flex flex-col border-l border-gray-700 transition-transform duration-300 ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
           <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800 shadow-sm z-10">
             <div className="flex items-center gap-3">
-              <img src="/hazelnote_tutor.png" className="w-10 h-10 rounded-full object-cover border-2 border-green-500 bg-green-900/30" />
+              <img src="/hazelnote_tutor.png" className="w-10 h-10 rounded-full object-cover aspect-square border-2 border-green-500 bg-green-900/30" />
               <div><h3 className="font-extrabold text-white text-base">Professor Hazel</h3><div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500"></span><span className="text-xs text-green-400 font-bold">Online AI Tutor</span></div></div>
             </div>
             <button onClick={() => { setChatOpen(false); setSidebarCollapsed(false); }} className="p-2 text-gray-400 hover:bg-gray-700 rounded-full"><X className="w-5 h-5" /></button>
@@ -1505,12 +1552,35 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
           <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-900 flex flex-col">
             {chatMessages.map((msg, i) => (
               <div key={i} className={`flex gap-3 max-w-[90%] animate-slide-in ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}>
-                {msg.role === 'ai' ? <img src="/hazelnote_tutor.png" className="w-8 h-8 rounded-full flex-shrink-0 bg-white" /> : <div className="w-8 h-8 rounded-full bg-gray-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold">U</div>}
+                {msg.role === 'ai' ? <img src="/hazelnote_tutor.png" className="w-8 h-8 rounded-full flex-shrink-0 object-cover aspect-square bg-white" /> : <div className="w-8 h-8 rounded-full bg-gray-700 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold">U</div>}
                 <div className={`p-3 text-sm rounded-2xl ${msg.role === 'ai' ? 'bg-gray-800 border border-gray-700 rounded-tl-sm text-gray-200' : 'bg-green-500 text-white rounded-tr-sm'}`} dangerouslySetInnerHTML={{ __html: msg.text }} />
               </div>
             ))}
           </div>
-          <div className="p-4 bg-gray-800 border-t border-gray-700"><div className="flex gap-2"><input type="text" value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyPress={e=>e.key==='Enter'&&sendChatMessage()} className="flex-1 border border-gray-600 bg-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500" placeholder="Ask a question..." /><button onClick={sendChatMessage} className="bg-green-500 text-white p-3 rounded-xl hover:bg-green-600 transition"><Send className="w-5 h-5" /></button></div></div>
+          <div className="p-4 bg-gray-800 border-t border-gray-700">
+             {chatFile && (
+                <div className="mb-3 flex items-center gap-2 bg-gray-700 p-2 rounded-lg text-xs font-medium text-gray-300 shadow-sm">
+                   <Paperclip className="w-3.5 h-3.5 text-green-400" /> {chatFile.name}
+                   <button onClick={() => setChatFile(null)} className="ml-auto text-red-400 hover:text-red-300 transition p-1 hover:bg-gray-600 rounded"><X className="w-3 h-3" /></button>
+                </div>
+             )}
+             <div className="flex gap-2 items-center">
+                <input type="file" id="chat-attachment" className="hidden" accept="image/*,.pdf" onChange={e => setChatFile(e.target.files?.[0] || null)} />
+                <label htmlFor="chat-attachment" className="p-3 bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600 rounded-xl cursor-pointer transition shadow-sm">
+                   <Paperclip className="w-5 h-5" />
+                </label>
+                <input 
+                   type="text" 
+                   value={chatInput} 
+                   onChange={e=>setChatInput(e.target.value)} 
+                   onKeyPress={e=>e.key==='Enter'&&sendChatMessage()} 
+                   onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300)}
+                   className="flex-1 border border-gray-600 bg-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500" 
+                   placeholder="Ask a question..." 
+                />
+                <button onClick={sendChatMessage} className="bg-green-500 text-white p-3 rounded-xl hover:bg-green-600 transition shadow-sm"><Send className="w-5 h-5" /></button>
+             </div>
+          </div>
         </div>
       )}
 
@@ -1593,7 +1663,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                 <textarea value={contextVoiceText} onChange={e=>setContextVoiceText(e.target.value)} className="w-full h-48 p-4 border border-gray-600 rounded-2xl focus:outline-none focus:border-indigo-500 bg-gray-900 text-white" placeholder="Type or dictate additional context..." />
               )}
               {contextInputMode === 'link' && (
-                <input type="text" id="context-url-input" className="w-full border border-gray-600 rounded-xl px-4 py-4 focus:outline-none focus:border-indigo-500 bg-gray-900 text-white" placeholder="Paste a YouTube URL here..." />
+                <input type="text" id="context-url-input" onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300)} className="w-full border border-gray-600 rounded-xl px-4 py-4 focus:outline-none focus:border-indigo-500 bg-gray-900 text-white" placeholder="Paste a YouTube URL here..." />
               )}
             </div>
 
@@ -1643,7 +1713,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
           <div className="bg-gray-800 rounded-[32px] w-full max-w-lg shadow-2xl border border-gray-700 flex flex-col max-h-[90vh]">
              <div className="p-6 border-b border-gray-700 flex justify-between items-center">
                 <h3 className="font-extrabold text-xl text-white flex items-center gap-2"><MessageCircleQuestion className="text-indigo-400" /> Audio Q&A with Professor</h3>
-                <button onClick={() => { setAskModalOpen(false); stopProfSpeaking(); }} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+                <button onClick={() => { isAskModalOpenRef.current = false; setAskModalOpen(false); stopProfSpeaking(); }} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
              </div>
              <div className="p-6 flex-1 overflow-y-auto flex flex-col items-center">
                 <p className="text-sm text-gray-400 mb-8 text-center">Tap the microphone and ask your question aloud.</p>
@@ -1662,7 +1732,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                   <div className="mt-8 w-full bg-indigo-900/20 border border-indigo-800/50 p-5 rounded-xl text-left animate-slide-in relative">
                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                           <img src="/hazelnote_tutor.png" className="w-6 h-6 rounded-full bg-white" />
+                           <img src="/hazelnote_tutor.png" className="w-6 h-6 rounded-full object-cover aspect-square bg-white" />
                            <span className="text-indigo-300 font-bold text-sm">Professor Hazel</span>
                         </div>
                         {isProfSpeaking && (
