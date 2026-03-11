@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -29,26 +29,21 @@ import {
   Play,
   Square,
   Headphones,
-  ChevronDown,
   Bold,
   Italic,
   Underline,
   Type,
-  Palette,
-  Highlighter,
   Image as ImageIcon,
   Table,
   FunctionSquare,
   MessageSquare,
   Save,
   RefreshCw,
-  Monitor,
-  Phone,
 } from 'lucide-react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { StudySet, PDFFile, UserStats } from '@/types';
+import { StudySet, UserStats } from '@/types';
 import { safeParseJSON, saveToStorage, renderMarkdownWithMath, getCurrentMonth } from '@/lib/utils';
 
 // Note editor toolbar component for Pro users
@@ -167,9 +162,8 @@ export default function Dashboard() {
   const [currentTab, setCurrentTab] = useState<'notes' | 'flashcards' | 'quiz' | 'podcast'>('notes');
   const [inputMode, setInputMode] = useState<'pdf' | 'voice' | 'link'>('pdf');
   
-  // State
-  const [pdfFiles, setPdfFiles] = useState<PDFFile[]>([]);
-  const [webText, setWebText] = useState('');
+  // Notice we now just store the RAW Javascript `File` object, keeping browser memory clean!
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]); 
   const [voiceText, setVoiceText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -186,7 +180,6 @@ export default function Dashboard() {
   
   // Podcast state
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentUtterance, setCurrentUtterance] = useState<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
   // Pro note editing state
@@ -200,20 +193,16 @@ export default function Dashboard() {
   // Modals
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
   const [goProModalOpen, setGoProModalOpen] = useState(false);
-  const [translationResult, setTranslationResult] = useState('');
-  const [translationResultModalOpen, setTranslationResultModalOpen] = useState(false);
 
-  // Loading tips
   const loadingTips = [
-    'Analyzing document structure...',
-    'Extracting key concepts & definitions...',
+    'Transmitting documents securely to AI Vision model...',
+    'Performing advanced OCR on handwriting...',
+    'Synthesizing documents into structured notes...',
     'Formatting Markdown tables...',
     'Formulating intelligent practice questions...',
     'Structuring audio podcast script...',
-    'Finalizing study workspace...',
   ];
 
-  // Initialize
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
@@ -224,8 +213,6 @@ export default function Dashboard() {
           const p = snap.data();
           setProfile(p);
           setTier(p.is_pro ? 'pro' : 'free');
-          
-          // For pro users, sync from Firebase
           if (p.is_pro) {
             syncFromFirebase(u.uid);
           }
@@ -233,14 +220,11 @@ export default function Dashboard() {
       }
     });
 
-    // Load from localStorage
     setStudyHistory(safeParseJSON('hz_study_history', []));
     setStats(safeParseJSON('hz_stats', { streak: 0, notes: 0, lastDate: null, monthlySets: {} }));
-
     return () => unsubscribe();
   }, []);
 
-  // Sync from Firebase for pro users
   const syncFromFirebase = async (userId: string) => {
     try {
       setSyncStatus('syncing');
@@ -254,7 +238,6 @@ export default function Dashboard() {
       });
       
       if (firebaseSets.length > 0) {
-        // Merge with local storage, preferring Firebase data
         const localSets = safeParseJSON('hz_study_history', []);
         const mergedSets = [...firebaseSets, ...localSets.filter((ls: StudySet) => 
           !firebaseSets.some((fs: StudySet) => fs.id === ls.id)
@@ -270,10 +253,8 @@ export default function Dashboard() {
     }
   };
 
-  // Sync to Firebase for pro users
   const syncToFirebase = async (studySet: StudySet) => {
     if (!user || tier !== 'pro') return;
-    
     try {
       setSyncStatus('syncing');
       const studySetRef = doc(db, 'studySets', `${user.uid}_${studySet.id}`);
@@ -289,7 +270,6 @@ export default function Dashboard() {
     }
   };
 
-  // Check streak
   useEffect(() => {
     const today = new Date().toDateString();
     if (stats.lastDate !== today) {
@@ -305,22 +285,26 @@ export default function Dashboard() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    const maxMB = tier === 'free' ? 5 : 50;
-    const newFiles: PDFFile[] = [];
+    // Up to 100MB for Pro, 10MB for free
+    const maxMB = tier === 'free' ? 10 : 100; 
+    const MAX_SAFE_SIZE = maxMB * 1024 * 1024;
+    
+    const newFiles: File[] = [];
 
     for (const file of files) {
-      if (file.size > maxMB * 1024 * 1024) {
-        alert(`File ${file.name} exceeds your tier limit of ${maxMB}MB.`);
+      if (file.size > MAX_SAFE_SIZE) {
+        alert(`File ${file.name} exceeds your limit of ${maxMB}MB.`);
         continue;
       }
+      newFiles.push(file); // Store raw file, NOT Base64
+    }
 
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result?.toString().split(',')[1] || '');
-        reader.readAsDataURL(file);
-      });
+    const currentTotalSize = pdfFiles.reduce((acc, file) => acc + file.size, 0);
+    const newFilesSize = newFiles.reduce((acc, file) => acc + file.size, 0);
 
-      newFiles.push({ mimeType: file.type, data: base64, name: file.name });
+    if (currentTotalSize + newFilesSize > MAX_SAFE_SIZE) {
+      alert(`Your plan allows a maximum of ${maxMB}MB per request. Your total upload exceeds this.`);
+      return;
     }
 
     setPdfFiles(prev => [...prev, ...newFiles]);
@@ -330,49 +314,122 @@ export default function Dashboard() {
     setPdfFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const callLLM = async (systemPrompt: string, userText: string, files?: PDFFile[]) => {
-    const payload: any = {
-      systemPrompt,
-      userText,
-    };
+  // THE MAGIC HAPPENS HERE
+  const callLLM = async (systemPrompt: string, userText: string, files?: File[]) => {
+    
+    // IF WE HAVE FILES: We upload directly to Gemini File API using chunked raw data
+    if (files && files.length > 0) {
+      setLoadingTip('Securing connection to Google AI servers...');
+      
+      // Step 1: Securely fetch the API key from our backend route
+      const keyRes = await fetch('/api/gemini');
+      const keyData = await keyRes.json();
+      if (keyData.error || !keyData.apiKey) throw new Error("Could not retrieve Gemini API key");
+      
+      const apiKey = keyData.apiKey;
+      const uploadedFilesToCleanup = [];
 
-    if (files && files.length > 0 && files[0].data) {
-      const fileSizeMB = (files[0].data.length * 0.75) / (1024 * 1024); // Approximate base64 size
+      try {
+        // Step 2: Upload each raw File natively to Gemini (Supporting huge 100MB+ files)
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          setLoadingTip(`Uploading document ${i + 1} of ${files.length} to AI natively (${(file.size/1024/1024).toFixed(1)}MB)...`);
 
-      // Use File API for files larger than 3MB to avoid Vercel's 4.5MB limit
-      if (fileSizeMB > 3) {
-        payload.pdfBase64 = files[0].data;
-        payload.mimeType = files[0].mimeType;
-        payload.useFileApi = true;
-      } else {
-        // Use inline data for smaller files
-        payload.pdfBase64 = files[0].data;
-        payload.mimeType = files[0].mimeType;
-        payload.useFileApi = false;
+          const uploadRes = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`, {
+            method: 'POST',
+            headers: {
+              'X-Goog-Upload-Protocol': 'raw',
+              'X-Goog-Upload-Header-Content-Type': file.type || 'application/pdf',
+              'Content-Type': file.type || 'application/pdf',
+            },
+            body: file // Passing the raw Blob directly to Google
+          });
+
+          const uploadData = await uploadRes.json();
+          if (!uploadRes.ok || !uploadData.file) {
+             throw new Error(`Upload failed: ${uploadData.error?.message || 'Unknown error'}`);
+          }
+
+          const fileName = uploadData.file.name;
+          const fileUri = uploadData.file.uri;
+          uploadedFilesToCleanup.push(fileName); // Track for cleanup later
+
+          // Step 3: Wait for Gemini to finish processing large PDFs
+          setLoadingTip(`AI is processing document ${i + 1}... This can take a moment for large files.`);
+          let state = uploadData.file.state;
+          while (state === 'PROCESSING') {
+            await new Promise(r => setTimeout(r, 3000));
+            const checkRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`);
+            const checkData = await checkRes.json();
+            state = checkData.state;
+            if (state === 'FAILED') throw new Error("AI failed to process the document.");
+          }
+        }
+
+        // Step 4: Build the payload and request Content Generation
+        setLoadingTip('Synthesizing study set via Gemini AI...');
+        const contents: any[] = [{ parts: [] }];
+        
+        uploadedFilesToCleanup.forEach(fileName => {
+          // Note: Gemini uses file.uri to reference the file during generation
+          // We can construct the URI easily from the name
+          contents[0].parts.push({ 
+            fileData: { 
+              mimeType: 'application/pdf', 
+              fileUri: `https://generativelanguage.googleapis.com/v1beta/${fileName}`
+            } 
+          });
+        });
+
+        let combinedText = systemPrompt || '';
+        if (userText) combinedText += '\n\nCONTEXT:\n' + userText;
+        if (combinedText) contents[0].parts.push({ text: combinedText });
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents,
+            generationConfig: { maxOutputTokens: 8192, temperature: 0.7 }
+          })
+        });
+
+        const data = await response.json();
+        if (!response.ok || data.error) throw new Error(data.error?.message || "Gemini API Error");
+        
+        return data.candidates[0].content.parts[0].text;
+
+      } finally {
+        // Step 5: Always clean up the massive files from Gemini's temp storage to save quotas
+        for (const fileName of uploadedFilesToCleanup) {
+          try {
+            await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`, {
+              method: 'DELETE'
+            });
+          } catch(e) {
+             console.error("Cleanup failed for", fileName);
+          }
+        }
       }
-    }
-
+    } 
+    
+    // IF NO FILES (Chat, Quizzes, Podcast): Safely route through our Next.js backend
     const res = await fetch('/api/gemini/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ systemPrompt, userText }),
     });
 
-    // Handle non-JSON responses
-    const contentType = res.headers.get('content-type');
+    const textResponse = await res.text();
     let data;
-
-    if (contentType && contentType.includes('application/json')) {
-      data = await res.json();
-    } else {
-      const text = await res.text();
-      throw new Error(`Server error: ${text.substring(0, 200)}`);
+    try {
+      data = JSON.parse(textResponse);
+    } catch (e) {
+      throw new Error(`Server returned an invalid response. Error: ${textResponse.substring(0, 50)}...`);
     }
 
     if (data.error) {
-      if (data.error.toLowerCase().includes('quota')) {
-        throw new Error('API_QUOTA_EXCEEDED');
-      }
+      if (data.error.toLowerCase().includes('quota')) throw new Error('API_QUOTA_EXCEEDED');
       throw new Error(data.error);
     }
 
@@ -380,7 +437,6 @@ export default function Dashboard() {
   };
 
   const generateStudySet = async () => {
-    // Check free tier limit - now 2 per month
     if (tier === 'free') {
       const month = getCurrentMonth();
       const count = stats.monthlySets[month] || 0;
@@ -391,21 +447,20 @@ export default function Dashboard() {
     }
 
     let finalContext = '';
-    if (webText) finalContext += '\n' + webText;
     if (voiceText) finalContext += '\n' + voiceText;
-    if (pdfFiles.length > 0) {
-      finalContext += '\n[Attached Documents: ' + pdfFiles.map(f => f.name).join(', ') + ']\n';
-    }
 
-    if (!finalContext.trim() && pdfFiles.length === 0) {
-      alert('Please upload a PDF, dictate, or paste text to begin.');
-      return;
+    if (inputMode === 'link') {
+      const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
+      if (!urlInput?.value) return alert('Please paste a YouTube URL to begin.');
+    } else if (inputMode === 'pdf') {
+      if (pdfFiles.length === 0) return alert('Please upload a PDF to begin.');
+    } else if (inputMode === 'voice') {
+      if (!voiceText.trim()) return alert('Please dictate or type notes to begin.');
     }
 
     setIsLoading(true);
     setLoadingProgress(0);
     
-    // Progress animation
     let progress = 0;
     let tipIndex = 0;
     const progressInterval = setInterval(() => {
@@ -423,6 +478,20 @@ export default function Dashboard() {
     const quizCount = tier === 'pro' ? 10 : 3;
 
     try {
+      // Grab YouTube text if needed
+      if (inputMode === 'link') {
+        setLoadingTip('Fetching YouTube transcript directly...');
+        const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
+        const ytRes = await fetch('/api/youtube/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlInput.value })
+        });
+        const ytData = await ytRes.json();
+        if (ytData.error) throw new Error(ytData.error);
+        finalContext += '\n' + ytData.text;
+      }
+
       const mainPrompt = `You are an expert tutor and instructional designer. Create highly structured, comprehensive study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===". Do NOT deviate from this structure.
 
 CRITICAL FORMATTING RULES:
@@ -461,7 +530,11 @@ ANSWER: [A/B/C/D]
 
 Ensure you output EXACTLY 5 parts using "===SPLIT===" as the separator.`;
 
-      const mainResult = await callLLM(mainPrompt, finalContext, pdfFiles);
+      const safeContext = finalContext.substring(0, 150000); 
+
+      // MAGIC: If pdfFiles are present, this goes natively to Google bypassing Vercel entirely!
+      const mainResult = await callLLM(mainPrompt, safeContext, pdfFiles);
+      
       let parts = mainResult.split('===SPLIT===').map((p: string) => p.trim());
       while (parts.length < 5) {
         parts.push('Content generation incomplete. Please regenerate.');
@@ -471,7 +544,6 @@ Ensure you output EXACTLY 5 parts using "===SPLIT===" as the separator.`;
       summaryClean = summaryClean.replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*)/is, '').trim();
       parts[1] = summaryClean;
 
-      // Generate clean podcast script without emotions, sound effects, or special characters
       const podPrompt = `Convert this content into a teaching monologue for an audio podcast. 
 
 IMPORTANT RULES:
@@ -483,18 +555,17 @@ IMPORTANT RULES:
 - Just plain text that can be read aloud naturally
 
 Content to convert:
-${parts[1] || finalContext.substring(0, 3000)}`;
+${parts[1] || safeContext.substring(0, 3000)}`;
       
       const podResult = await callLLM(podPrompt, '');
-      // Clean the podcast result further
       const cleanPodResult = podResult
-        .replace(/\*[^*]*\*/g, '') // Remove asterisk-wrapped content
-        .replace(/\([^)]*\)/g, '') // Remove parenthetical directions
-        .replace(/\[[^\]]*\]/g, '') // Remove bracketed content
-        .replace(/\{[^}]*\}/g, '') // Remove curly brace content
+        .replace(/\*[^*]*\*/g, '')
+        .replace(/\([^)]*\)/g, '')
+        .replace(/\[[^\]]*\]/g, '')
+        .replace(/\{[^}]*\}/g, '')
         .replace(/\b(excitedly|happily|sadly|angrily|cheerfully|dramatically|enthusiastically)\b/gi, '')
         .replace(/\b(pause|beat|sigh|laugh|chuckle|gasp)\b/gi, '')
-        .replace(/\s+/g, ' ') // Normalize whitespace
+        .replace(/\s+/g, ' ')
         .trim();
 
       clearInterval(progressInterval);
@@ -513,17 +584,14 @@ ${parts[1] || finalContext.substring(0, 3000)}`;
         chatCount: 0,
       };
 
-      // Save to history
       const newHistory = [studySet, ...studyHistory].slice(0, 50);
       setStudyHistory(newHistory);
       saveToStorage('hz_study_history', newHistory);
 
-      // Sync to Firebase for pro users
       if (tier === 'pro') {
         await syncToFirebase(studySet);
       }
 
-      // Update stats
       const today = new Date().toDateString();
       const newStats = { ...stats };
       if (newStats.lastDate !== today) {
@@ -536,9 +604,7 @@ ${parts[1] || finalContext.substring(0, 3000)}`;
       setStats(newStats);
       saveToStorage('hz_stats', newStats);
 
-      // Reset form
       setPdfFiles([]);
-      setWebText('');
       setVoiceText('');
 
       setIsLoading(false);
@@ -579,7 +645,6 @@ ${parts[1] || finalContext.substring(0, 3000)}`;
   const sendChatMessage = async () => {
     if (!chatInput.trim() || !currentStudySet) return;
 
-    // Check free tier limit
     if (tier === 'free' && currentStudySet.chatCount >= 3) {
       setGoProModalOpen(true);
       return;
@@ -650,18 +715,13 @@ ${context}`;
       setStudyHistory(newHistory);
       saveToStorage('hz_study_history', newHistory);
       
-      // Sync to Firebase for pro users
-      if (tier === 'pro') {
-        await syncToFirebase(newSet);
-      }
-      
+      if (tier === 'pro') await syncToFirebase(newSet);
       loadStudySet(newSet);
     } catch (e: any) {
       alert('Translation failed: ' + e.message);
     }
   };
 
-  // Edge TTS voices for podcast
   const EDGE_TTS_VOICES = [
     { name: 'en-US-AriaNeural', label: 'Aria (US Female)' },
     { name: 'en-US-GuyNeural', label: 'Guy (US Male)' },
@@ -676,7 +736,6 @@ ${context}`;
     if (!currentStudySet?.podcast) return;
     
     if (isPlaying) {
-      // Stop playback
       window.speechSynthesis.cancel();
       if (audioRef.current) {
         audioRef.current.pause();
@@ -686,7 +745,6 @@ ${context}`;
       return;
     }
 
-    // Start playback using browser TTS with selected voice
     const lines = currentStudySet.podcast.split(/[.!?]+/).filter(l => l.trim().length > 10);
     setIsPlaying(true);
 
@@ -700,39 +758,27 @@ ${context}`;
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
       
-      // Try to set voice
       const voices = window.speechSynthesis.getVoices();
       const preferredVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural') || v.lang === 'en-US');
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-      }
+      if (preferredVoice) utterance.voice = preferredVoice;
 
       utterance.onend = () => speakLine(index + 1);
-      utterance.onerror = () => {
-        setIsPlaying(false);
-      };
-      
+      utterance.onerror = () => setIsPlaying(false);
       window.speechSynthesis.speak(utterance);
     };
 
     speakLine(0);
   };
 
-  // Load voices when available
   useEffect(() => {
-    const loadVoices = () => {
-      window.speechSynthesis.getVoices();
-    };
+    const loadVoices = () => window.speechSynthesis.getVoices();
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
   }, []);
 
   const renderFlashcards = (text: string) => {
-    if (!text || text.includes('incomplete')) {
-      return <p className="text-gray-500">No flashcards generated.</p>;
-    }
+    if (!text || text.includes('incomplete')) return <p className="text-gray-500">No flashcards generated.</p>;
 
-    // Updated regex to match QUESTION/ANSWER format
     const regex = /QUESTION:\s*([\s\S]*?)\s*ANSWER:\s*([\s\S]*?)(?=QUESTION:|$)/gi;
     const cards: { question: string; answer: string }[] = [];
     let match;
@@ -741,7 +787,6 @@ ${context}`;
       cards.push({ question: match[1].trim(), answer: match[2].trim() });
     }
 
-    // Fallback to old format if no cards found
     if (cards.length === 0) {
       const oldRegex = /FRONT:\s*([\s\S]*?)\s*BACK:\s*([\s\S]*?)(?=FRONT:|$)/gi;
       while ((match = oldRegex.exec(text)) !== null) {
@@ -764,9 +809,7 @@ ${context}`;
   };
 
   const renderQuiz = (text: string) => {
-    if (!text || text.includes('incomplete')) {
-      return <p className="text-gray-500">No quiz generated.</p>;
-    }
+    if (!text || text.includes('incomplete')) return <p className="text-gray-500">No quiz generated.</p>;
 
     const regex = /QUESTION:\s*([\s\S]*?)\s*A\)\s*([\s\S]*?)\s*B\)\s*([\s\S]*?)\s*C\)\s*([\s\S]*?)\s*D\)\s*([\s\S]*?)\s*ANSWER:\s*([A-D])/gi;
     const questions: { q: string; opts: string[]; answer: string }[] = [];
@@ -817,51 +860,22 @@ ${context}`;
     );
   };
 
-  // Handle opening chat - collapse sidebar and don't dim
-  const handleOpenChat = () => {
-    setSidebarCollapsed(true);
-    setChatOpen(true);
-  };
-
-  // Handle closing chat - restore sidebar
-  const handleCloseChat = () => {
-    setChatOpen(false);
-    setSidebarCollapsed(false);
-  };
-
-  // Pro note editing handlers
-  const handleFormat = (format: string) => {
-    document.execCommand(format, false);
-  };
-
-  const handleInsertMath = () => {
-    const mathInput = prompt('Enter LaTeX math (e.g., E = mc^2):');
-    if (mathInput) {
-      document.execCommand('insertText', false, ` $${mathInput}$ `);
-    }
-  };
-
-  const handleInsertImage = () => {
-    const imageUrl = prompt('Enter image URL:');
-    if (imageUrl) {
-      document.execCommand('insertImage', false, imageUrl);
-    }
-  };
-
+  const handleOpenChat = () => { setSidebarCollapsed(true); setChatOpen(true); };
+  const handleCloseChat = () => { setChatOpen(false); setSidebarCollapsed(false); };
+  const handleFormat = (format: string) => document.execCommand(format, false);
+  const handleInsertMath = () => { const mathInput = prompt('Enter LaTeX math (e.g., E = mc^2):'); if (mathInput) document.execCommand('insertText', false, ` $${mathInput}$ `); };
+  const handleInsertImage = () => { const imageUrl = prompt('Enter image URL:'); if (imageUrl) document.execCommand('insertImage', false, imageUrl); };
+  
   const handleInsertTable = () => {
     const rows = parseInt(prompt('Number of rows:', '3') || '3');
     const cols = parseInt(prompt('Number of columns:', '3') || '3');
-    
     let tableHtml = '<table class="border-collapse border border-gray-400 my-4"><tbody>';
     for (let i = 0; i < rows; i++) {
       tableHtml += '<tr>';
-      for (let j = 0; j < cols; j++) {
-        tableHtml += '<td class="border border-gray-400 p-2">Cell</td>';
-      }
+      for (let j = 0; j < cols; j++) tableHtml += '<td class="border border-gray-400 p-2">Cell</td>';
       tableHtml += '</tr>';
     }
     tableHtml += '</tbody></table>';
-    
     document.execCommand('insertHTML', false, tableHtml);
   };
 
@@ -869,39 +883,23 @@ ${context}`;
     const selection = window.getSelection()?.toString();
     if (selection) {
       const comment = prompt('Add your comment:');
-      if (comment) {
-        const highlightedText = `<span class="bg-yellow-200 dark:bg-yellow-700" title="${comment}">${selection}</span>`;
-        document.execCommand('insertHTML', false, highlightedText);
-      }
+      if (comment) document.execCommand('insertHTML', false, `<span class="bg-yellow-200 dark:bg-yellow-700" title="${comment}">${selection}</span>`);
     }
   };
 
   const saveEditedNotes = async () => {
     if (!currentStudySet) return;
-    
     const updatedParts = [...currentStudySet.parts];
     updatedParts[2] = editedNotes;
-    
-    const updatedSet = {
-      ...currentStudySet,
-      parts: updatedParts,
-    };
-    
+    const updatedSet = { ...currentStudySet, parts: updatedParts };
     setCurrentStudySet(updatedSet);
-    
     const newHistory = studyHistory.map(s => s.id === updatedSet.id ? updatedSet : s);
     setStudyHistory(newHistory);
     saveToStorage('hz_study_history', newHistory);
-    
-    // Sync to Firebase for pro users
-    if (tier === 'pro') {
-      await syncToFirebase(updatedSet);
-    }
-    
+    if (tier === 'pro') await syncToFirebase(updatedSet);
     setIsEditing(false);
   };
 
-  // Sidebar component with desktop hamburger support
   const Sidebar = () => (
     <aside className={`bg-gray-900 border-r border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-all duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} ${sidebarCollapsed ? 'md:w-0 md:opacity-0 md:overflow-hidden' : 'w-72'}`}>
       <div className="p-6 flex items-center justify-between">
@@ -962,35 +960,22 @@ ${context}`;
 
   return (
     <div className="flex h-screen overflow-hidden bg-gradient-to-br from-[#0F172A] to-[#1E293B]">
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm" />
-      )}
-
+      {sidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm" />}
       <Sidebar />
 
       <main className={`flex-1 h-full overflow-y-auto relative transition-all duration-300 ${sidebarCollapsed ? 'md:ml-0' : ''}`}>
-        {/* Desktop hamburger menu button */}
-        <button 
-          onClick={() => setSidebarOpen(true)} 
-          className="hidden md:flex fixed top-4 left-4 z-30 p-2 bg-gray-800/80 backdrop-blur border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition items-center gap-2"
-        >
-          <Menu className="w-5 h-5" />
-          <span className="text-sm font-medium">Menu</span>
+        <button onClick={() => setSidebarOpen(true)} className="hidden md:flex fixed top-4 left-4 z-30 p-2 bg-gray-800/80 backdrop-blur border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition items-center gap-2">
+          <Menu className="w-5 h-5" /> <span className="text-sm font-medium">Menu</span>
         </button>
 
-        {/* Mobile header */}
         <div className="md:hidden bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center gap-3 sticky top-0 z-30">
-          <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-300 hover:bg-gray-800 rounded-lg transition">
-            <Menu className="w-6 h-6" />
-          </button>
+          <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-300 hover:bg-gray-800 rounded-lg transition"><Menu className="w-6 h-6" /></button>
           <div className="flex items-center gap-2">
             <img src="/hazelnote_logo.png" alt="HazelNote Logo" className="w-8 h-8 rounded-lg object-cover" />
             <span className="font-extrabold text-lg text-white">HazelNote</span>
           </div>
         </div>
 
-        {/* Dashboard View */}
         {currentView === 'dashboard' && (
           <div className="p-6 md:p-8 max-w-5xl mx-auto pt-8 md:pt-12">
             <header className="mb-10">
@@ -1000,20 +985,14 @@ ${context}`;
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
               <div className="glass-card p-6 flex items-center gap-5 transition hover:shadow-lg bg-gray-800/50 backdrop-blur-lg border-gray-700">
-                <div className="w-14 h-14 rounded-2xl bg-green-900/40 flex items-center justify-center text-green-400">
-                  <Flame className="w-7 h-7" />
-                </div>
+                <div className="w-14 h-14 rounded-2xl bg-green-900/40 flex items-center justify-center text-green-400"><Flame className="w-7 h-7" /></div>
                 <div>
                   <p className="text-sm text-gray-400 font-medium">Study Streak</p>
-                  <p className="text-3xl font-extrabold text-white">
-                    {stats.streak} <span className="text-lg text-gray-500 font-medium">Days</span>
-                  </p>
+                  <p className="text-3xl font-extrabold text-white">{stats.streak} <span className="text-lg text-gray-500 font-medium">Days</span></p>
                 </div>
               </div>
               <div className="glass-card p-6 flex items-center gap-5 transition hover:shadow-lg bg-gray-800/50 backdrop-blur-lg border-gray-700">
-                <div className="w-14 h-14 rounded-2xl bg-blue-900/40 flex items-center justify-center text-blue-400">
-                  <FileCheck2 className="w-7 h-7" />
-                </div>
+                <div className="w-14 h-14 rounded-2xl bg-blue-900/40 flex items-center justify-center text-blue-400"><FileCheck2 className="w-7 h-7" /></div>
                 <div>
                   <p className="text-sm text-gray-400 font-medium">Notes Generated</p>
                   <p className="text-3xl font-extrabold text-white">{stats.notes}</p>
@@ -1021,14 +1000,10 @@ ${context}`;
               </div>
               {tier === 'free' && (
                 <div className="glass-card p-6 flex items-center gap-5 transition hover:shadow-lg bg-gray-800/50 backdrop-blur-lg border-gray-700">
-                  <div className="w-14 h-14 rounded-2xl bg-purple-900/40 flex items-center justify-center text-purple-400">
-                    <Sparkles className="w-7 h-7" />
-                  </div>
+                  <div className="w-14 h-14 rounded-2xl bg-purple-900/40 flex items-center justify-center text-purple-400"><Sparkles className="w-7 h-7" /></div>
                   <div>
                     <p className="text-sm text-gray-400 font-medium">Monthly Sets</p>
-                    <p className="text-3xl font-extrabold text-white">
-                      {stats.monthlySets?.[getCurrentMonth()] || 0}<span className="text-lg text-gray-500 font-medium">/2</span>
-                    </p>
+                    <p className="text-3xl font-extrabold text-white">{stats.monthlySets?.[getCurrentMonth()] || 0}<span className="text-lg text-gray-500 font-medium">/2</span></p>
                   </div>
                 </div>
               )}
@@ -1036,36 +1011,22 @@ ${context}`;
 
             <div className="glass-card p-8 md:p-12 text-center relative overflow-hidden bg-gray-800/50 backdrop-blur-lg border-gray-700">
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="w-20 h-20 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-green-400">
-                <Sparkles className="w-10 h-10" />
-              </div>
+              <div className="w-20 h-20 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-green-400"><Sparkles className="w-10 h-10" /></div>
               <h3 className="text-2xl font-bold text-white mb-2">Ready to learn something new?</h3>
               <p className="text-gray-400 mb-8 max-w-md mx-auto">Upload PDFs, dictate voice notes, or paste YouTube URLs to generate your next study set.</p>
-              <button onClick={() => setCurrentView('create')} className="btn-primary px-10 py-4 text-lg shadow-xl">
-                Create New Study Set
-              </button>
+              <button onClick={() => setCurrentView('create')} className="btn-primary px-10 py-4 text-lg shadow-xl">Create New Study Set</button>
             </div>
 
             <div className="mt-10">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-bold text-white">Recent Study Sets</h3>
-              </div>
+              <div className="flex justify-between items-center mb-6"><h3 className="text-2xl font-bold text-white">Recent Study Sets</h3></div>
               <div className="space-y-4">
-                {studyHistory.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No study sets yet. Create your first one!</p>
-                ) : (
+                {studyHistory.length === 0 ? <p className="text-gray-500 text-center py-8">No study sets yet. Create your first one!</p> : (
                   studyHistory.slice(0, 10).map((set) => (
-                    <div
-                      key={set.id}
-                      onClick={() => loadStudySet(set)}
-                      className="glass-card p-5 hover:shadow-lg transition cursor-pointer bg-gray-800/50 backdrop-blur-lg border-gray-700"
-                    >
+                    <div key={set.id} onClick={() => loadStudySet(set)} className="glass-card p-5 hover:shadow-lg transition cursor-pointer bg-gray-800/50 backdrop-blur-lg border-gray-700">
                       <div className="flex justify-between items-start mb-2">
                         <h4 className="font-bold text-white flex-1 mr-2">{set.title}</h4>
                         <div className="flex gap-2">
-                          <button onClick={(e) => deleteStudySet(set.id, e)} className="text-gray-500 hover:text-red-400 transition" title="Delete">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <button onClick={(e) => deleteStudySet(set.id, e)} className="text-gray-500 hover:text-red-400 transition" title="Delete"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </div>
                       <p className="text-sm text-gray-400 mb-3">{set.summary}</p>
@@ -1082,37 +1043,28 @@ ${context}`;
           </div>
         )}
 
-        {/* Create View */}
         {currentView === 'create' && !isLoading && (
           <div className="p-6 md:p-8 max-w-4xl mx-auto pt-8 md:pt-12">
             <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-8 text-center tracking-tight">What are we studying today?</h2>
             
             <div className="glass-card p-2 rounded-[32px] flex flex-col md:flex-row gap-2 mb-10 mx-auto max-w-2xl bg-gray-800/50 backdrop-blur-lg border-gray-700">
-              <button onClick={() => setInputMode('pdf')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'pdf' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}>
-                <FileUp className="w-4 h-4" /> PDF Upload
-              </button>
-              <button onClick={() => setInputMode('voice')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'voice' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}>
-                <Mic className="w-4 h-4" /> Voice Record
-              </button>
-              <button onClick={() => setInputMode('link')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'link' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}>
-                <LinkIcon className="w-4 h-4" /> YouTube
-              </button>
+              <button onClick={() => setInputMode('pdf')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'pdf' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}><FileUp className="w-4 h-4" /> PDF Upload</button>
+              <button onClick={() => setInputMode('voice')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'voice' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}><Mic className="w-4 h-4" /> Voice Record</button>
+              <button onClick={() => setInputMode('link')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode === 'link' ? 'bg-green-500 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}><LinkIcon className="w-4 h-4" /> YouTube</button>
             </div>
 
             {inputMode === 'pdf' && (
               <div className="glass-card p-8 md:p-12 text-center border-2 border-dashed border-gray-600 bg-gray-800/50 backdrop-blur-lg">
                 <FileText className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-                <h3 className="text-xl font-bold mb-2 text-white">Upload Multiple PDFs</h3>
-                <p className="text-gray-400 mb-8 max-w-sm mx-auto">Upload documents to be instantly processed via Gemini AI. {tier === 'free' ? 'Max 5MB per file.' : 'Max 50MB per file.'}</p>
+                <h3 className="text-xl font-bold mb-2 text-white">Upload Handwritten or Typed Notes</h3>
+                <p className="text-gray-400 mb-8 max-w-sm mx-auto">Upload massive documents straight to Google AI! <span className="text-blue-400 block mt-2">Max Limit: {tier === 'free' ? '10MB' : '100MB'}</span></p>
                 <input type="file" id="pdf-upload" multiple accept=".pdf" className="hidden" onChange={handlePDFUpload} />
                 <label htmlFor="pdf-upload" className="btn-primary px-10 py-4 cursor-pointer inline-block shadow-lg text-lg">Browse Files</label>
                 <div className="mt-8 flex flex-wrap gap-2 justify-center">
                   {pdfFiles.map((file, i) => (
                     <span key={i} className="bg-green-900/40 text-green-400 text-xs px-4 py-2 rounded-full font-bold border border-green-800 flex items-center gap-2">
-                      <CheckCircle className="w-3 h-3" /> {file.name}
-                      <button onClick={() => removePDF(i)} className="hover:text-red-400 transition ml-1 bg-green-800/50 hover:bg-red-900/50 p-1 rounded-full">
-                        <X className="w-3 h-3" />
-                      </button>
+                      <CheckCircle className="w-3 h-3" /> {file.name} ({(file.size / 1024 / 1024).toFixed(1)}MB)
+                      <button onClick={() => removePDF(i)} className="hover:text-red-400 transition ml-1 bg-green-800/50 hover:bg-red-900/50 p-1 rounded-full"><X className="w-3 h-3" /></button>
                     </span>
                   ))}
                 </div>
@@ -1121,26 +1073,16 @@ ${context}`;
 
             {inputMode === 'voice' && (
               <div className="glass-card p-8 md:p-12 text-center bg-gray-800/50 backdrop-blur-lg border-gray-700">
-                <textarea
-                  value={voiceText}
-                  onChange={(e) => setVoiceText(e.target.value)}
-                  className="w-full h-40 p-5 border border-gray-600 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-700 text-white text-base"
-                  placeholder="Type or dictate your notes..."
-                />
+                <textarea value={voiceText} onChange={(e) => setVoiceText(e.target.value)} className="w-full h-40 p-5 border border-gray-600 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-700 text-white text-base" placeholder="Type or dictate your notes..." />
               </div>
             )}
 
             {inputMode === 'link' && (
               <div className="glass-card p-8 md:p-10 bg-gray-800/50 backdrop-blur-lg border-gray-700">
                 <div className="flex flex-col gap-3 mb-4">
-                  <input
-                    type="text"
-                    id="youtube-url-input"
-                    className="flex-1 border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 bg-gray-700 text-white text-sm font-medium"
-                    placeholder="Paste a YouTube URL here..."
-                  />
+                  <input type="text" id="youtube-url-input" className="flex-1 border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 bg-gray-700 text-white text-sm font-medium" placeholder="Paste a YouTube URL here..." />
                 </div>
-                <p className="text-sm text-gray-400 mb-4">Enter a YouTube URL and click Generate to automatically fetch the transcript and create a study set.</p>
+                <p className="text-sm text-gray-400 mb-4">We simply extract the transcript (closed captions) as pure text and send it to our AI. The video file is never downloaded!</p>
               </div>
             )}
 
@@ -1152,7 +1094,6 @@ ${context}`;
           </div>
         )}
 
-        {/* Loading View */}
         {isLoading && (
           <div className="max-w-2xl mx-auto mt-10 text-center p-8 md:p-12">
             <div className="relative w-40 h-40 mx-auto mb-8">
@@ -1166,14 +1107,13 @@ ${context}`;
             </div>
             <h3 className="text-2xl font-extrabold text-white mb-4">Synthesizing Knowledge...</h3>
             <div className="h-10 flex items-center justify-center">
-              <p className="text-sm font-medium text-green-400 bg-green-900/30 px-5 py-2.5 rounded-full border border-green-800 shadow-sm transition-opacity duration-300">
+              <p className="text-sm font-medium text-green-400 bg-green-900/30 px-5 py-2.5 rounded-full border border-green-800 shadow-sm transition-opacity duration-300 text-center max-w-[80%]">
                 {loadingTip}
               </p>
             </div>
           </div>
         )}
 
-        {/* Study View */}
         {currentView === 'study' && currentStudySet && (
           <div className="p-4 md:p-8 max-w-6xl mx-auto pb-32 pt-6 md:pt-10">
             <div className="mb-6 flex justify-between items-center">
@@ -1186,17 +1126,10 @@ ${context}`;
               <div className="border-b border-gray-700 bg-gray-800/50">
                 <div className="p-6 md:px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
                   <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">{currentStudySet.title}</h2>
-                  
                   <div className="flex flex-wrap gap-2 w-full md:w-auto">
-                    <button onClick={() => window.print()} className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-gray-600 shadow-sm">
-                      <Printer className="w-4 h-4" /> Export PDF
-                    </button>
-                    <button onClick={() => setTranslateModalOpen(true)} className="text-sm bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-blue-800 shadow-sm">
-                      <Languages className="w-4 h-4" /> Translate
-                    </button>
-                    <button onClick={handleOpenChat} className="text-sm bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition shadow-md border border-green-600">
-                      <img src="/hazelnote_tutor.png" className="w-5 h-5 rounded-full object-cover bg-white border border-green-400" /> Chat with Professor Hazel
-                    </button>
+                    <button onClick={() => window.print()} className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-gray-600 shadow-sm"><Printer className="w-4 h-4" /> Export PDF</button>
+                    <button onClick={() => setTranslateModalOpen(true)} className="text-sm bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-blue-800 shadow-sm"><Languages className="w-4 h-4" /> Translate</button>
+                    <button onClick={handleOpenChat} className="text-sm bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition shadow-md border border-green-600"><img src="/hazelnote_tutor.png" className="w-5 h-5 rounded-full object-cover bg-white border border-green-400" /> Chat with Professor</button>
                   </div>
                 </div>
               </div>
@@ -1204,15 +1137,7 @@ ${context}`;
               <div className="px-6 md:px-8 pt-8 -mb-4 bg-gradient-to-br from-[#0F172A] to-[#1E293B] z-10 relative">
                 <div className="inline-flex p-1.5 bg-gray-800 border border-gray-700 rounded-[20px] shadow-sm gap-1 overflow-x-auto max-w-full">
                   {(['notes', 'flashcards', 'quiz', 'podcast'] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setCurrentTab(tab)}
-                      className={`text-sm px-5 py-2.5 rounded-xl font-bold transition-all ${
-                        currentTab === tab
-                          ? 'bg-green-500 text-white shadow-md transform scale-[1.02]'
-                          : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                      }`}
-                    >
+                    <button key={tab} onClick={() => setCurrentTab(tab)} className={`text-sm px-5 py-2.5 rounded-xl font-bold transition-all ${currentTab === tab ? 'bg-green-500 text-white shadow-md transform scale-[1.02]' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}>
                       {tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                   ))}
@@ -1222,75 +1147,37 @@ ${context}`;
               <div className="p-6 md:p-8 min-h-[600px] bg-gradient-to-br from-[#0F172A] to-[#1E293B] study-content-area relative z-0">
                 {currentTab === 'notes' && (
                   <div>
-                    {/* Pro Note Editing Toolbar */}
                     {tier === 'pro' && (
                       <div className="mb-4">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-bold text-green-400 uppercase tracking-wider flex items-center gap-1">
-                            <Sparkles className="w-3 h-3" /> Pro Editing Enabled
-                          </span>
+                          <span className="text-xs font-bold text-green-400 uppercase tracking-wider flex items-center gap-1"><Sparkles className="w-3 h-3" /> Pro Editing Enabled</span>
                           <div className="flex gap-2">
                             {isEditing ? (
-                              <>
-                                <button onClick={saveEditedNotes} className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg font-bold flex items-center gap-1">
-                                  <Save className="w-3 h-3" /> Save
-                                </button>
-                                <button onClick={() => setIsEditing(false)} className="text-xs bg-gray-700 text-gray-300 px-3 py-1 rounded-lg font-bold">
-                                  Cancel
-                                </button>
-                              </>
+                              <><button onClick={saveEditedNotes} className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg font-bold flex items-center gap-1"><Save className="w-3 h-3" /> Save</button><button onClick={() => setIsEditing(false)} className="text-xs bg-gray-700 text-gray-300 px-3 py-1 rounded-lg font-bold">Cancel</button></>
                             ) : (
-                              <button onClick={() => setIsEditing(true)} className="text-xs bg-blue-900/30 text-blue-400 px-3 py-1 rounded-lg font-bold flex items-center gap-1">
-                                <Type className="w-3 h-3" /> Edit Notes
-                              </button>
+                              <button onClick={() => setIsEditing(true)} className="text-xs bg-blue-900/30 text-blue-400 px-3 py-1 rounded-lg font-bold flex items-center gap-1"><Type className="w-3 h-3" /> Edit Notes</button>
                             )}
                           </div>
                         </div>
                         {isEditing && (
-                          <NoteEditorToolbar
-                            onFormat={handleFormat}
-                            onInsertMath={handleInsertMath}
-                            onInsertImage={handleInsertImage}
-                            onInsertTable={handleInsertTable}
-                            onAddComment={handleAddComment}
-                            fontSize={fontSize}
-                            setFontSize={setFontSize}
-                            fontColor={fontColor}
-                            setFontColor={setFontColor}
-                            highlightColor={highlightColor}
-                            setHighlightColor={setHighlightColor}
-                          />
+                          <NoteEditorToolbar onFormat={handleFormat} onInsertMath={handleInsertMath} onInsertImage={handleInsertImage} onInsertTable={handleInsertTable} onAddComment={handleAddComment} fontSize={fontSize} setFontSize={setFontSize} fontColor={fontColor} setFontColor={setFontColor} highlightColor={highlightColor} setHighlightColor={setHighlightColor} />
                         )}
                       </div>
                     )}
                     <div className="bg-green-900/20 p-6 md:p-8 rounded-[24px] mb-8 border border-green-800/50">
-                      <h3 className="text-green-400 font-extrabold text-xs uppercase tracking-widest mb-4 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4" /> Executive Summary
-                      </h3>
+                      <h3 className="text-green-400 font-extrabold text-xs uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Executive Summary</h3>
                       <div className="text-gray-200 text-lg leading-relaxed prose-p:my-0" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[1] || 'No summary available.') }} />
                     </div>
                     {isEditing && tier === 'pro' ? (
-                      <div 
-                        className="prose prose-lg max-w-none text-gray-200 bg-gray-800/50 p-6 rounded-2xl border border-gray-700 min-h-[400px]"
-                        contentEditable
-                        suppressContentEditableWarning
-                        onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)}
-                        dangerouslySetInnerHTML={{ __html: editedNotes }}
-                        style={{ fontSize: `${fontSize}px`, color: fontColor }}
-                      />
+                      <div className="prose prose-lg max-w-none text-gray-200 bg-gray-800/50 p-6 rounded-2xl border border-gray-700 min-h-[400px]" contentEditable suppressContentEditableWarning onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: editedNotes }} style={{ fontSize: `${fontSize}px`, color: fontColor }} />
                     ) : (
                       <div className="prose prose-lg max-w-none text-gray-200" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[2] || 'No notes available.') }} />
                     )}
                   </div>
                 )}
                 
-                {currentTab === 'flashcards' && (
-                  <div>{renderFlashcards(currentStudySet.parts[3] || '')}</div>
-                )}
-                
-                {currentTab === 'quiz' && (
-                  <div>{renderQuiz(currentStudySet.parts[4] || '')}</div>
-                )}
+                {currentTab === 'flashcards' && <div>{renderFlashcards(currentStudySet.parts[3] || '')}</div>}
+                {currentTab === 'quiz' && <div>{renderQuiz(currentStudySet.parts[4] || '')}</div>}
                 
                 {currentTab === 'podcast' && (
                   <div className="max-w-2xl mx-auto">
@@ -1302,31 +1189,18 @@ ${context}`;
                       <h3 className="text-2xl font-bold mb-2">Audio Lesson</h3>
                       <p className="text-indigo-200 mb-6 max-w-md mx-auto text-sm">Listen to an AI-generated teaching monologue based on your notes.</p>
                       
-                      {/* Voice Selection */}
                       <div className="mb-6">
                         <label className="text-xs text-indigo-300 mb-2 block">Select Voice</label>
-                        <select 
-                          value={selectedVoice} 
-                          onChange={(e) => setSelectedVoice(e.target.value)}
-                          className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm text-white"
-                        >
-                          {EDGE_TTS_VOICES.map(voice => (
-                            <option key={voice.name} value={voice.name} className="text-black">{voice.label}</option>
-                          ))}
+                        <select value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm text-white">
+                          {EDGE_TTS_VOICES.map(voice => <option key={voice.name} value={voice.name} className="text-black">{voice.label}</option>)}
                         </select>
                       </div>
 
-                      <button 
-                        onClick={togglePodcast} 
-                        className="bg-white text-indigo-900 w-16 h-16 rounded-full flex items-center justify-center mx-auto hover:scale-105 transition shadow-lg"
-                      >
+                      <button onClick={togglePodcast} className="bg-white text-indigo-900 w-16 h-16 rounded-full flex items-center justify-center mx-auto hover:scale-105 transition shadow-lg">
                         {isPlaying ? <Square className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
                       </button>
-                      <p className="text-xs text-indigo-300 mt-4">
-                        {isPlaying ? 'Playing... Click to stop' : 'Click to play'}
-                      </p>
+                      <p className="text-xs text-indigo-300 mt-4">{isPlaying ? 'Playing... Click to stop' : 'Click to play'}</p>
                     </div>
-                    {/* Transcript is now hidden */}
                   </div>
                 )}
               </div>
@@ -1335,7 +1209,6 @@ ${context}`;
         )}
       </main>
 
-      {/* Chat Panel - No backdrop blur/dimming */}
       {chatOpen && (
         <div className={`fixed right-0 top-0 bottom-0 w-full md:w-[420px] bg-gray-800 shadow-2xl z-50 flex flex-col border-l border-gray-700 transition-transform duration-300 ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
           <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800 shadow-sm z-10">
@@ -1343,62 +1216,39 @@ ${context}`;
               <img src="/hazelnote_tutor.png" className="w-10 h-10 rounded-full object-cover border-2 border-green-500 bg-green-900/30" />
               <div>
                 <h3 className="font-extrabold text-white text-base">Professor Hazel</h3>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  <span className="text-xs text-green-400 font-bold">Online AI Tutor</span>
-                </div>
+                <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500"></span><span className="text-xs text-green-400 font-bold">Online AI Tutor</span></div>
               </div>
             </div>
-            <button onClick={handleCloseChat} className="p-2 text-gray-400 hover:bg-gray-700 rounded-full transition">
-              <X className="w-5 h-5" />
-            </button>
+            <button onClick={handleCloseChat} className="p-2 text-gray-400 hover:bg-gray-700 rounded-full transition"><X className="w-5 h-5" /></button>
           </div>
           <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-900 flex flex-col">
             {chatMessages.map((msg, i) => (
               <div key={i} className={`flex gap-3 max-w-[90%] animate-slide-in ${msg.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}>
-                {msg.role === 'ai' ? (
-                  <img src="/hazelnote_tutor.png" className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-white border border-gray-600" />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold">U</div>
-                )}
+                {msg.role === 'ai' ? <img src="/hazelnote_tutor.png" className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-white border border-gray-600" /> : <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex-shrink-0 flex items-center justify-center text-white text-xs font-bold">U</div>}
                 <div className={`p-3 text-sm rounded-2xl ${msg.role === 'ai' ? 'bg-gray-800 border border-gray-700 rounded-tl-sm shadow-sm text-gray-200' : 'bg-green-500 text-white rounded-tr-sm shadow-sm'}`} dangerouslySetInnerHTML={{ __html: msg.text }} />
               </div>
             ))}
           </div>
           <div className="p-4 bg-gray-800 border-t border-gray-700 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
             <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
-              <button onClick={() => { setChatInput('Please rewrite the main concepts of these notes to make them clearer and easier to understand.'); }} className="whitespace-nowrap px-4 py-1.5 bg-blue-900/30 text-blue-400 text-xs font-bold rounded-full border border-blue-800 hover:bg-blue-900/50 transition">Rewrite Notes</button>
-              <button onClick={() => { setChatInput('Shorten these notes into a brief, easy-to-read bulleted summary.'); }} className="whitespace-nowrap px-4 py-1.5 bg-green-900/30 text-green-400 text-xs font-bold rounded-full border border-green-800 hover:bg-green-900/50 transition">Shorten</button>
-              <button onClick={() => { setChatInput('Expand on the key concepts in these notes and provide more detailed explanations.'); }} className="whitespace-nowrap px-4 py-1.5 bg-purple-900/30 text-purple-400 text-xs font-bold rounded-full border border-purple-800 hover:bg-purple-900/50 transition">Expand Concepts</button>
+              <button onClick={() => setChatInput('Rewrite these notes to be clearer.')} className="whitespace-nowrap px-4 py-1.5 bg-blue-900/30 text-blue-400 text-xs font-bold rounded-full border border-blue-800 hover:bg-blue-900/50 transition">Rewrite Notes</button>
+              <button onClick={() => setChatInput('Shorten these notes into a brief summary.')} className="whitespace-nowrap px-4 py-1.5 bg-green-900/30 text-green-400 text-xs font-bold rounded-full border border-green-800 hover:bg-green-900/50 transition">Shorten</button>
+              <button onClick={() => setChatInput('Expand on the key concepts in these notes.')} className="whitespace-nowrap px-4 py-1.5 bg-purple-900/30 text-purple-400 text-xs font-bold rounded-full border border-purple-800 hover:bg-purple-900/50 transition">Expand Concepts</button>
             </div>
             <div className="flex gap-2">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
-                className="flex-1 border border-gray-600 bg-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 focus:bg-gray-600 transition font-medium"
-                placeholder="Ask a question about the notes..."
-              />
-              <button onClick={sendChatMessage} className="bg-green-500 text-white p-3 rounded-xl hover:bg-green-600 transition shadow-md">
-                <Send className="w-5 h-5" />
-              </button>
+              <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()} className="flex-1 border border-gray-600 bg-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 focus:bg-gray-600 transition font-medium" placeholder="Ask a question about the notes..." />
+              <button onClick={sendChatMessage} className="bg-green-500 text-white p-3 rounded-xl hover:bg-green-600 transition shadow-md"><Send className="w-5 h-5" /></button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Translate Modal */}
       {translateModalOpen && (
         <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-center justify-center backdrop-blur-sm p-4">
           <div className="bg-gray-800 rounded-[32px] w-full max-w-md shadow-2xl border border-gray-700">
             <div className="p-6 border-b border-gray-700 flex justify-between items-center">
-              <h3 className="font-extrabold text-xl text-white flex items-center gap-2">
-                <Languages className="text-blue-400" /> Translate Notes
-              </h3>
-              <button onClick={() => setTranslateModalOpen(false)} className="p-2 hover:bg-gray-700 rounded-full text-gray-400">
-                <X className="w-5 h-5" />
-              </button>
+              <h3 className="font-extrabold text-xl text-white flex items-center gap-2"><Languages className="text-blue-400" /> Translate Notes</h3>
+              <button onClick={() => setTranslateModalOpen(false)} className="p-2 hover:bg-gray-700 rounded-full text-gray-400"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 space-y-4">
               <div>
@@ -1411,34 +1261,23 @@ ${context}`;
                   <option value="German">Deutsch — German</option>
                 </select>
               </div>
-              <button onClick={translateNotes} className="w-full py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 transition flex items-center justify-center gap-2">
-                <Languages className="w-4 h-4" /> Translate Now
-              </button>
+              <button onClick={translateNotes} className="w-full py-3 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 transition flex items-center justify-center gap-2"><Languages className="w-4 h-4" /> Translate Now</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Go Pro Modal */}
       {goProModalOpen && (
         <div className="fixed inset-0 bg-gray-900/80 z-50 flex items-center justify-center backdrop-blur-sm p-4">
           <div className="bg-gray-800 rounded-[32px] w-full max-w-md shadow-2xl border border-gray-700 p-8 text-center">
-            <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
+            <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-6"><Sparkles className="w-8 h-8 text-white" /></div>
             <h3 className="text-2xl font-extrabold text-white mb-3">Upgrade to Pro</h3>
             <p className="text-gray-400 mb-6">
-              {tier === 'free' && stats.monthlySets?.[getCurrentMonth()] >= 2 
-                ? "You've reached your monthly limit of 2 study sets. Upgrade to Pro for unlimited access!"
-                : "Unlock unlimited study sets, advanced editing, device sync, and more with Pro!"}
+              {tier === 'free' && stats.monthlySets?.[getCurrentMonth()] >= 2 ? "You've reached your monthly limit of 2 study sets. Upgrade to Pro for unlimited access!" : "Unlock unlimited study sets, advanced editing, device sync, and more with Pro!"}
             </p>
             <div className="flex gap-3">
-              <button onClick={() => setGoProModalOpen(false)} className="flex-1 py-3 bg-gray-700 text-white rounded-xl font-bold hover:bg-gray-600 transition">
-                Maybe Later
-              </button>
-              <Link href="/pricing/" onClick={() => setGoProModalOpen(false)} className="flex-1 py-3 bg-gradient-to-br from-green-500 to-blue-500 text-white rounded-xl font-bold hover:opacity-90 transition">
-                View Pro Plans
-              </Link>
+              <button onClick={() => setGoProModalOpen(false)} className="flex-1 py-3 bg-gray-700 text-white rounded-xl font-bold hover:bg-gray-600 transition">Maybe Later</button>
+              <Link href="/pricing/" onClick={() => setGoProModalOpen(false)} className="flex-1 py-3 bg-gradient-to-br from-green-500 to-blue-500 text-white rounded-xl font-bold hover:opacity-90 transition">View Pro Plans</Link>
             </div>
           </div>
         </div>
