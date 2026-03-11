@@ -119,6 +119,12 @@ export default function Login() {
     }
   };
 
+  const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+    setTimeout(() => {
+      e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
+  };
+
   return (
     <div className="min-h-screen bg-[#0F172A] flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background orbs */}
@@ -197,6 +203,7 @@ export default function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSignIn()}
+                onFocus={handleInputFocus}
                 placeholder="you@example.com"
                 className="w-full bg-[rgba(15,23,42,0.7)] border border-white/[0.09] rounded-[11px] py-2.5 px-3 text-[#E2E8F0] text-[0.875rem] transition-all outline-none focus:border-[#10B981] focus:shadow-[0_0_0_3px_rgba(16,185,129,0.12)] placeholder:text-[#374151]"
               />
@@ -211,6 +218,7 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSignIn()}
+                onFocus={handleInputFocus}
                 placeholder="••••••••"
                 className="w-full bg-[rgba(15,23,42,0.7)] border border-white/[0.09] rounded-[11px] py-2.5 px-3 text-[#E2E8F0] text-[0.875rem] transition-all outline-none focus:border-[#10B981] focus:shadow-[0_0_0_3px_rgba(16,185,129,0.12)] placeholder:text-[#374151]"
               />
@@ -235,6 +243,7 @@ export default function Login() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                onFocus={handleInputFocus}
                 placeholder="Alex Johnson"
                 className="w-full bg-[rgba(15,23,42,0.7)] border border-white/[0.09] rounded-[11px] py-2.5 px-3 text-[#E2E8F0] text-[0.875rem] transition-all outline-none focus:border-[#10B981] focus:shadow-[0_0_0_3px_rgba(16,185,129,0.12)] placeholder:text-[#374151]"
               />
@@ -245,6 +254,7 @@ export default function Login() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onFocus={handleInputFocus}
                 placeholder="you@example.com"
                 className="w-full bg-[rgba(15,23,42,0.7)] border border-white/[0.09] rounded-[11px] py-2.5 px-3 text-[#E2E8F0] text-[0.875rem] transition-all outline-none focus:border-[#10B981] focus:shadow-[0_0_0_3px_rgba(16,185,129,0.12)] placeholder:text-[#374151]"
               />
@@ -256,6 +266,7 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSignUp()}
+                onFocus={handleInputFocus}
                 placeholder="At least 8 characters"
                 className="w-full bg-[rgba(15,23,42,0.7)] border border-white/[0.09] rounded-[11px] py-2.5 px-3 text-[#E2E8F0] text-[0.875rem] transition-all outline-none focus:border-[#10B981] focus:shadow-[0_0_0_3px_rgba(16,185,129,0.12)] placeholder:text-[#374151]"
               />
@@ -283,6 +294,7 @@ export default function Login() {
                 type="email"
                 value={resetEmail}
                 onChange={(e) => setResetEmail(e.target.value)}
+                onFocus={handleInputFocus}
                 placeholder="you@example.com"
                 className="w-full bg-[rgba(15,23,42,0.7)] border border-white/[0.09] rounded-[11px] py-2.5 px-3 text-[#E2E8F0] text-[0.875rem] transition-all outline-none focus:border-[#10B981] focus:shadow-[0_0_0_3px_rgba(16,185,129,0.12)] placeholder:text-[#374151]"
               />
