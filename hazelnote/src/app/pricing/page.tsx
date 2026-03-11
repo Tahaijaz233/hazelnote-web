@@ -87,7 +87,7 @@ export default function Pricing() {
               <Link href="/login/" className="block w-full py-3 px-6 text-center bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition mb-8">Get Started Free</Link>
               <div className="space-y-4">
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">2 study sets per month</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">PDF upload (up to 10MB)</span></div>
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">PDF upload (up to 5MB)</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">Max 3 AI Tutor chats per set</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">Standard Flashcards & Quizzes</span></div>
               </div>
@@ -104,7 +104,7 @@ export default function Pricing() {
               <Link href="/login/" className="block w-full py-3 px-6 text-center btn-primary text-white font-bold rounded-xl mb-8">Upgrade to Pro</Link>
               <div className="space-y-4">
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white font-semibold">Unlimited study sets</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">PDF upload (up to 500MB)</span></div>
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">PDF upload (up to 50MB)</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Unlimited AI Tutor chats</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">AI Podcasts & Translation</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Up to 30 Exam Questions</span></div>
