@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET() {
-  // Deliver the API key to the client for direct-to-Gemini massive file uploads.
-  // This allows the browser to bypass Vercel's strict 4.5MB serverless payload limit!
   const RAW_GEMINI_KEYS = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
   const API_KEYS = RAW_GEMINI_KEYS.split(',').map(k => k.trim()).filter(Boolean);
 
@@ -15,10 +13,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    // This handles lightweight text-only requests (Chats, Podcasts, Exams)
-    // keeping the API key completely hidden on the server for standard requests.
     const body = await request.json();
-    const { systemPrompt, userText } = body;
+    const { systemPrompt, userText, audioBase64, audioMimeType } = body;
 
     const RAW_GEMINI_KEYS = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
     const API_KEYS = RAW_GEMINI_KEYS.split(',').map(k => k.trim()).filter(Boolean);
@@ -30,7 +26,16 @@ export async function POST(request: NextRequest) {
     const contents: any[] = [{ parts: [] }];
     let combinedText = systemPrompt || '';
     if (userText) combinedText += '\n\nCONTEXT:\n' + userText;
+    
+    // Add text if present
     if (combinedText) contents[0].parts.push({ text: combinedText });
+
+    // Handle voice audio
+    if (audioBase64 && audioMimeType) {
+      contents[0].parts.push({
+        inlineData: { mimeType: audioMimeType, data: audioBase64 }
+      });
+    }
 
     const payload = {
       contents,
