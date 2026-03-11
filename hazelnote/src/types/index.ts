@@ -11,6 +11,12 @@ export interface StudySet {
   folderId?: string;
 }
 
+export interface Folder {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
 export interface Flashcard {
   front: string;
   back: string;
@@ -38,6 +44,8 @@ export interface UserProfile {
   monthly_sets: Record<string, number>;
   total_sets_created: number;
   last_active: Date;
+  stats?: UserStats;
+  folders?: Folder[];
 }
 
 export interface PDFFile {
