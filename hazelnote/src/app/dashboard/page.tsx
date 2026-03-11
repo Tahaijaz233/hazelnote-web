@@ -64,11 +64,11 @@ const NoteEditorToolbar = ({
   const highlightColors = ['transparent', '#FEF08A', '#A7F3D0', '#BFDBFE', '#FBCFE8', '#E9D5FF'];
 
   return (
-    <div className="sticky top-0 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-sm rounded-t-2xl">
-      <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
+    <div className="sticky top-0 z-20 bg-gray-800/90 backdrop-blur-md border border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-sm rounded-2xl mb-4">
+      <div className="flex items-center gap-1 border-r border-gray-700 pr-2">
         <select 
           onChange={(e) => onFormat('fontSize', e.target.value)}
-          className="text-sm border border-gray-200 dark:border-gray-600 rounded px-2 py-1 bg-gray-50 dark:bg-gray-700 dark:text-white focus:outline-none"
+          className="text-sm border border-gray-600 rounded px-2 py-1 bg-gray-700 text-white focus:outline-none"
           defaultValue="3"
         >
           <option value="1">Small</option>
@@ -78,37 +78,37 @@ const NoteEditorToolbar = ({
         </select>
       </div>
       
-      <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
-        <button onClick={() => onFormat('bold')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300" title="Bold"><Bold className="w-4 h-4" /></button>
-        <button onClick={() => onFormat('italic')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300" title="Italic"><Italic className="w-4 h-4" /></button>
-        <button onClick={() => onFormat('underline')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300" title="Underline"><Underline className="w-4 h-4" /></button>
+      <div className="flex items-center gap-1 border-r border-gray-700 pr-2">
+        <button onClick={() => onFormat('bold')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Bold"><Bold className="w-4 h-4" /></button>
+        <button onClick={() => onFormat('italic')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Italic"><Italic className="w-4 h-4" /></button>
+        <button onClick={() => onFormat('underline')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Underline"><Underline className="w-4 h-4" /></button>
       </div>
 
-      <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
-        <span className="text-xs text-gray-500 font-medium ml-1">Text:</span>
+      <div className="flex items-center gap-1 border-r border-gray-700 pr-2">
+        <span className="text-xs text-gray-400 font-medium ml-1">Text:</span>
         <div className="flex gap-1 ml-1">
           {colors.map(c => (
-            <button key={`c-${c}`} onClick={() => onFormat('foreColor', c)} className="w-5 h-5 rounded-full border border-gray-300 shadow-sm" style={{ backgroundColor: c }} title={`Text Color ${c}`} />
+            <button key={`c-${c}`} onClick={() => onFormat('foreColor', c)} className="w-5 h-5 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition" style={{ backgroundColor: c }} title={`Text Color ${c}`} />
           ))}
         </div>
       </div>
 
-      <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
-        <span className="text-xs text-gray-500 font-medium ml-1">Highlight:</span>
+      <div className="flex items-center gap-1 border-r border-gray-700 pr-2">
+        <span className="text-xs text-gray-400 font-medium ml-1">Highlight:</span>
         <div className="flex gap-1 ml-1">
           {highlightColors.map(c => (
-            <button key={`h-${c}`} onClick={() => onFormat('hiliteColor', c === 'transparent' ? '#ffffff' : c)} className={`w-5 h-5 rounded-full border border-gray-300 shadow-sm ${c === 'transparent' ? 'bg-white flex items-center justify-center' : ''}`} style={{ backgroundColor: c === 'transparent' ? 'transparent' : c }} title={`Highlight ${c}`}>
-              {c === 'transparent' && <span className="text-[10px] text-gray-400">✕</span>}
+            <button key={`h-${c}`} onClick={() => onFormat('hiliteColor', c === 'transparent' ? '#ffffff' : c)} className={`w-5 h-5 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition ${c === 'transparent' ? 'bg-gray-800 flex items-center justify-center' : ''}`} style={{ backgroundColor: c === 'transparent' ? 'transparent' : c }} title={`Highlight ${c}`}>
+              {c === 'transparent' && <span className="text-[10px] text-gray-500">✕</span>}
             </button>
           ))}
         </div>
       </div>
 
       <div className="flex items-center gap-1">
-        <button onClick={onInsertMath} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 font-medium"><FunctionSquare className="w-4 h-4 text-blue-500" /> Math</button>
-        <button onClick={onInsertImage} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 font-medium"><ImageIcon className="w-4 h-4 text-green-500" /> Image</button>
-        <button onClick={onInsertTable} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 font-medium"><Table className="w-4 h-4 text-orange-500" /> Table</button>
-        <button onClick={onAddComment} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 font-medium"><MessageSquare className="w-4 h-4 text-purple-500" /> Comment</button>
+        <button onClick={onInsertMath} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><FunctionSquare className="w-4 h-4 text-blue-400" /> Math</button>
+        <button onClick={onInsertImage} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><ImageIcon className="w-4 h-4 text-green-400" /> Image</button>
+        <button onClick={onInsertTable} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><Table className="w-4 h-4 text-orange-400" /> Table</button>
+        <button onClick={onAddComment} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><MessageSquare className="w-4 h-4 text-purple-400" /> Comment</button>
       </div>
     </div>
   );
@@ -147,6 +147,7 @@ export default function Dashboard() {
   
   // Pro note editing state
   const [editedNotes, setEditedNotes] = useState<string>('');
+  const [editedSummary, setEditedSummary] = useState<string>('');
   const [isEditing, setIsEditing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('offline');
   
@@ -185,22 +186,25 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
-  // Fetch actual valid local system voices
+  // Fetch actual valid local system voices with priority for Neural/Edge voices
   useEffect(() => {
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
       setAvailableVoices(voices);
       if (voices.length > 0 && !selectedVoiceURI) {
-        // Find best default voice (Natural / Google / System English)
-        const bestVoice = voices.find(v => (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha')) && v.lang.startsWith('en')) || voices[0];
-        setSelectedVoiceURI(bestVoice.voiceURI);
+        // Prioritize Edge Neural, Microsoft Online, Google, then standard system english
+        const bestVoice = voices.find(v => v.name.includes('Neural') || v.name.includes('Natural')) 
+                       || voices.find(v => v.name.includes('Microsoft') && v.name.includes('Online'))
+                       || voices.find(v => v.name.includes('Google') || v.name.includes('Samantha')) 
+                       || voices.find(v => v.lang.startsWith('en')) 
+                       || voices[0];
+        if (bestVoice) setSelectedVoiceURI(bestVoice.voiceURI);
       }
     };
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
   }, [selectedVoiceURI]);
 
-  // Fixed paths to match user's rules: match /profiles/{userId} { match /study_sets/{setId} }
   const syncFromFirebase = async (userId: string) => {
     try {
       setSyncStatus('syncing');
@@ -451,7 +455,7 @@ export default function Dashboard() {
         finalContext += '\n' + ytData.text;
       }
 
-      const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===".
+      const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===" on a new line. Do not bold the SPLIT text.
 
 Section 1: SHORT TITLE (4-8 words max)
 ===SPLIT===
@@ -459,17 +463,17 @@ Section 2: EXECUTIVE SUMMARY (exactly 250 words)
 ===SPLIT===
 Section 3: DETAILED NOTES in Markdown format. Use tables and bold text. Inline math $formula$, block $$formula$$.
 ===SPLIT===
-Section 4: Create exactly ${flashcardCount} FLASHCARDS. Format strictly:
-QUESTION: [Question text]
-ANSWER: [Answer text]
+Section 4: Create exactly ${flashcardCount} FLASHCARDS. Format strictly as a list without bolding Q/A:
+Q: [Question text]
+A: [Answer text]
 ===SPLIT===
 Section 5: Create exactly ${quizCount} QUIZ QUESTIONS. Format strictly:
-QUESTION: [Question text]
+Q: [Question text]
 A) [Option A]
 B) [Option B]
 C) [Option C]
 D) [Option D]
-ANSWER: [A/B/C/D]
+Ans: [A/B/C/D]
 
 Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
 
@@ -477,9 +481,15 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
 
       const mainResult = await callLLM(mainPrompt, safeContext, pdfFiles);
       
-      let parts = mainResult.split('===SPLIT===').map((p: string) => p.trim());
+      let parts = mainResult.split(/===SPLIT===/i).map((p: string) => p.trim());
       while (parts.length < 5) {
         parts.push('Content generation incomplete. Please regenerate.');
+      }
+
+      // Title parsing
+      let generatedTitle = parts[0]?.replace(/^(Title:|Here is.*?|Study Set:?|\*\*.*?:\*\*|Section 1:?)\s*/i, '').replace(/[*#]/g, '').trim().substring(0, 100);
+      if (!generatedTitle || generatedTitle.includes('SPLIT')) {
+        generatedTitle = `Study Set - ${new Date().toLocaleDateString()}`;
       }
 
       let summaryClean = (parts[1] || '').trim();
@@ -507,7 +517,7 @@ Content: ${parts[1] || safeContext.substring(0, 3000)}`;
 
       const studySet: StudySet = {
         id: Date.now(),
-        title: parts[0]?.replace(/^(Title:|Here is.*?|Study Set:?|\*\*.*?:\*\*|Section 1:?)\s*/i, '').replace(/[*#]/g, '').trim().substring(0, 100) || `Study Set - ${new Date().toLocaleDateString()}`,
+        title: generatedTitle,
         date: new Date().toISOString(),
         summary: (parts[1] || '').substring(0, 200) + '...',
         flashcardCount,
@@ -552,7 +562,7 @@ Content: ${parts[1] || safeContext.substring(0, 3000)}`;
 
   const loadStudySet = (studySet: StudySet) => {
     setCurrentStudySet(studySet);
-    setEditedNotes(studySet.parts[2] || '');
+    setIsEditing(false); // Reset editing mode naturally
     setChatMessages([
       {
         role: 'ai',
@@ -658,11 +668,16 @@ ${context}`;
       return;
     }
 
-    const lines = currentStudySet.podcast.split(/[.!?]+/).filter(l => l.trim().length > 10);
+    // Securely chunk sentences to avoid OS API cutting them off
+    const text = currentStudySet.podcast;
+    const chunks = text.match(/[^.!?]+[.!?]+/g) || [text];
+    const lines = chunks.map(c => c.trim()).filter(c => c.length > 0);
+    
     setIsPlaying(true);
+    window.speechSynthesis.cancel(); // clear previous queues
 
     const speakLine = (index: number) => {
-      if (index >= lines.length) {
+      if (index >= lines.length || !isPlaying) {
         setIsPlaying(false);
         return;
       }
@@ -677,29 +692,46 @@ ${context}`;
       }
 
       utterance.onend = () => speakLine(index + 1);
-      utterance.onerror = () => setIsPlaying(false);
+      utterance.onerror = (e) => {
+        console.error("TTS Error:", e);
+        if (isPlaying) speakLine(index + 1); // Recover gracefully
+        else setIsPlaying(false);
+      };
+      
       window.speechSynthesis.speak(utterance);
     };
 
     speakLine(0);
   };
 
-  // Fixed Robust Parsing Regex
+  // Robust manual line-by-line parsing for Flashcards
   const renderFlashcards = (text: string) => {
     if (!text || text.includes('incomplete')) return <p className="text-gray-500">No flashcards generated.</p>;
 
-    // Clean markdown bolding that Gemini might incorrectly wrap keywords with
-    const cleanText = text.replace(/\*\*/g, '');
-    const regex = /(?:QUESTION|Q):\s*([\s\S]*?)\s*(?:ANSWER|A):\s*([\s\S]*?)(?=(?:QUESTION|Q):|$)/gi;
-    
+    const lines = text.split('\n');
     const cards: { question: string; answer: string }[] = [];
-    let match;
+    let currentQ = '';
+    let currentA = '';
+    let state = 'search'; 
 
-    while ((match = regex.exec(cleanText)) !== null) {
-      if (match[1].trim() && match[2].trim()) {
-        cards.push({ question: match[1].trim(), answer: match[2].trim() });
+    for (let line of lines) {
+      line = line.replace(/\*\*/g, '').trim();
+      if (!line) continue;
+      
+      if (/^(?:Q|Question)(?:\s*\d*)?[:.]\s*(.*)/i.test(line)) {
+        if (currentQ && currentA) cards.push({ question: currentQ.trim(), answer: currentA.trim() });
+        currentQ = line.replace(/^(?:Q|Question)(?:\s*\d*)?[:.]\s*/i, '');
+        currentA = '';
+        state = 'q';
+      } else if (/^(?:A|Answer)(?:\s*\d*)?[:.]\s*(.*)/i.test(line)) {
+        currentA = line.replace(/^(?:A|Answer)(?:\s*\d*)?[:.]\s*/i, '');
+        state = 'a';
+      } else {
+        if (state === 'q') currentQ += '\n' + line;
+        else if (state === 'a') currentA += '\n' + line;
       }
     }
+    if (currentQ && currentA) cards.push({ question: currentQ.trim(), answer: currentA.trim() });
 
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -716,23 +748,36 @@ ${context}`;
     );
   };
 
+  // Robust manual line-by-line parsing for Quizzes
   const renderQuiz = (text: string) => {
     if (!text || text.includes('incomplete')) return <p className="text-gray-500">No quiz generated.</p>;
 
-    // Clean markdown before parsing
-    const cleanText = text.replace(/\*\*/g, '');
-    const regex = /(?:QUESTION|Q):\s*([\s\S]*?)\s*A\)\s*([\s\S]*?)\s*B\)\s*([\s\S]*?)\s*C\)\s*([\s\S]*?)\s*D\)\s*([\s\S]*?)\s*(?:ANSWER|A):\s*([A-D])/gi;
-    
+    const lines = text.split('\n');
     const questions: { q: string; opts: string[]; answer: string }[] = [];
-    let match;
+    let currentQ = { q: '', opts: [] as string[], answer: '' };
+    let state = 'search';
 
-    while ((match = regex.exec(cleanText)) !== null) {
-      questions.push({
-        q: match[1].trim(),
-        opts: [match[2].trim(), match[3].trim(), match[4].trim(), match[5].trim()],
-        answer: match[6].trim().toUpperCase(),
-      });
+    for (let line of lines) {
+      line = line.replace(/\*\*/g, '').trim();
+      if (!line) continue;
+      
+      if (/^(?:Q|Question)(?:\s*\d*)?[:.]\s*(.*)/i.test(line)) {
+        if (currentQ.q && currentQ.opts.length >= 2 && currentQ.answer) questions.push({...currentQ});
+        currentQ = { q: line.replace(/^(?:Q|Question)(?:\s*\d*)?[:.]\s*/i, ''), opts: [], answer: '' };
+        state = 'q';
+      } else if (/^[A-D][).]\s*/i.test(line)) {
+        currentQ.opts.push(line.replace(/^[A-D][).]\s*/i, ''));
+        state = 'opt';
+      } else if (/^(?:Ans|Answer)(?:\s*\d*)?[:.]\s*([A-D])/i.test(line)) {
+        const match = line.match(/^(?:Ans|Answer)(?:\s*\d*)?[:.]\s*([A-D])/i);
+        if (match) currentQ.answer = match[1].toUpperCase();
+        state = 'ans';
+      } else {
+        if (state === 'q') currentQ.q += '\n' + line;
+        else if (state === 'opt' && currentQ.opts.length > 0) currentQ.opts[currentQ.opts.length-1] += '\n' + line;
+      }
     }
+    if (currentQ.q && currentQ.opts.length >= 2 && currentQ.answer) questions.push({...currentQ});
 
     return (
       <div className="max-w-3xl mx-auto space-y-4">
@@ -800,15 +845,27 @@ ${context}`;
     }
   };
 
+  const enterEditMode = () => {
+    if (!currentStudySet) return;
+    // We convert raw markdown into HTML first so they edit actual formatted nodes
+    setEditedSummary(renderMarkdownWithMath(currentStudySet.parts[1] || ''));
+    setEditedNotes(renderMarkdownWithMath(currentStudySet.parts[2] || ''));
+    setIsEditing(true);
+  };
+
   const saveEditedNotes = async () => {
     if (!currentStudySet) return;
     const updatedParts = [...currentStudySet.parts];
+    updatedParts[1] = editedSummary;
     updatedParts[2] = editedNotes;
+    
     const updatedSet = { ...currentStudySet, parts: updatedParts };
     setCurrentStudySet(updatedSet);
+    
     const newHistory = studyHistory.map(s => s.id === updatedSet.id ? updatedSet : s);
     setStudyHistory(newHistory);
     saveToStorage('hz_study_history', newHistory);
+    
     if (tier === 'pro') await syncToFirebase(updatedSet);
     setIsEditing(false);
   };
@@ -1066,9 +1123,9 @@ ${context}`;
                           <span className="text-xs font-bold text-green-400 uppercase tracking-wider flex items-center gap-1"><Sparkles className="w-3 h-3" /> Pro Editing Enabled</span>
                           <div className="flex gap-2">
                             {isEditing ? (
-                              <><button onClick={saveEditedNotes} className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg font-bold flex items-center gap-1"><Save className="w-3 h-3" /> Save</button><button onClick={() => setIsEditing(false)} className="text-xs bg-gray-700 text-gray-300 px-3 py-1 rounded-lg font-bold">Cancel</button></>
+                              <><button onClick={saveEditedNotes} className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg font-bold flex items-center gap-1"><Save className="w-3 h-3" /> Save</button><button onClick={() => setIsEditing(false)} className="text-xs bg-gray-700 text-gray-300 px-3 py-1 rounded-lg font-bold transition hover:bg-gray-600">Cancel</button></>
                             ) : (
-                              <button onClick={() => setIsEditing(true)} className="text-xs bg-blue-900/30 text-blue-400 px-3 py-1 rounded-lg font-bold flex items-center gap-1"><Type className="w-3 h-3" /> Edit Notes</button>
+                              <button onClick={enterEditMode} className="text-xs bg-blue-900/30 text-blue-400 px-3 py-1 rounded-lg font-bold flex items-center gap-1 transition hover:bg-blue-900/50"><Type className="w-3 h-3" /> Edit Notes</button>
                             )}
                           </div>
                         </div>
@@ -1077,20 +1134,38 @@ ${context}`;
                         )}
                       </div>
                     )}
-                    <div className="bg-green-900/20 p-6 md:p-8 rounded-[24px] mb-8 border border-green-800/50">
-                      <h3 className="text-green-400 font-extrabold text-xs uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Executive Summary</h3>
-                      <div className="text-gray-200 text-lg leading-relaxed prose-p:my-0" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[1] || 'No summary available.') }} />
-                    </div>
+                    
                     {isEditing && tier === 'pro' ? (
-                      <div 
-                        className="prose prose-lg max-w-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-8 rounded-b-2xl border-x border-b border-gray-200 dark:border-gray-700 min-h-[500px] shadow-inner focus:outline-none" 
-                        contentEditable 
-                        suppressContentEditableWarning 
-                        onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)} 
-                        dangerouslySetInnerHTML={{ __html: editedNotes }} 
-                      />
+                      <div className="space-y-6 animate-slide-in">
+                        <div className="bg-green-900/10 p-6 md:p-8 rounded-[24px] border-2 border-dashed border-green-500/40 relative">
+                          <div className="absolute top-0 right-0 bg-green-500/20 text-green-400 text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-[24px] uppercase tracking-wider">Editing Summary</div>
+                          <div 
+                            className="prose prose-lg max-w-none text-gray-200 focus:outline-none min-h-[100px] note-editor-content" 
+                            contentEditable 
+                            suppressContentEditableWarning 
+                            onBlur={(e) => setEditedSummary(e.currentTarget.innerHTML)} 
+                            dangerouslySetInnerHTML={{ __html: editedSummary }} 
+                          />
+                        </div>
+                        <div className="bg-blue-900/10 p-6 md:p-8 rounded-[24px] border-2 border-dashed border-blue-500/40 relative">
+                          <div className="absolute top-0 right-0 bg-blue-500/20 text-blue-400 text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-[24px] uppercase tracking-wider">Editing Notes</div>
+                          <div 
+                            className="prose prose-lg max-w-none text-gray-200 focus:outline-none min-h-[400px] note-editor-content" 
+                            contentEditable 
+                            suppressContentEditableWarning 
+                            onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)} 
+                            dangerouslySetInnerHTML={{ __html: editedNotes }} 
+                          />
+                        </div>
+                      </div>
                     ) : (
-                      <div className="prose prose-lg max-w-none text-gray-200" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[2] || 'No notes available.') }} />
+                      <div className="animate-slide-in">
+                        <div className="bg-green-900/20 p-6 md:p-8 rounded-[24px] mb-8 border border-green-800/50">
+                          <h3 className="text-green-400 font-extrabold text-xs uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles className="w-4 h-4" /> Executive Summary</h3>
+                          <div className="text-gray-200 text-lg leading-relaxed prose-p:my-0" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[1] || 'No summary available.') }} />
+                        </div>
+                        <div className="prose prose-lg max-w-none text-gray-200" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[2] || 'No notes available.') }} />
+                      </div>
                     )}
                   </div>
                 )}
@@ -1116,8 +1191,8 @@ ${context}`;
                           className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm text-white w-full max-w-xs focus:outline-none"
                         >
                           {availableVoices.length > 0 ? availableVoices.map(voice => (
-                            <option key={voice.voiceURI} value={voice.voiceURI} className="text-black">{voice.name} ({voice.lang})</option>
-                          )) : <option className="text-black">Loading local voices...</option>}
+                            <option key={voice.voiceURI} value={voice.voiceURI} className="text-black bg-white">{voice.name} ({voice.lang})</option>
+                          )) : <option className="text-black bg-white">Loading local voices...</option>}
                         </select>
                       </div>
 
