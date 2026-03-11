@@ -33,28 +33,33 @@ import {
   Underline,
   Type,
   ImageIcon,
-  Table,
   FunctionSquare,
   Palette,
-  MessageSquare,
   Save,
   RefreshCw,
   FastForward,
   Rewind,
   MessageCircleQuestion,
+  Highlighter,
+  Table as TableIcon,
+  FolderOpen,
+  StopCircle
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { StudySet, UserStats } from '@/types';
+import { StudySet, UserStats, Folder } from '@/types';
 import { safeParseJSON, saveToStorage, renderMarkdownWithMath, getCurrentMonth, pcmToWav, base64ToArrayBuffer } from '@/lib/utils';
 import katex from 'katex';
 
 const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   const [activePopup, setActivePopup] = useState<string | null>(null);
   const [mathInput, setMathInput] = useState('');
+  const [tableRows, setTableRows] = useState(3);
+  const [tableCols, setTableCols] = useState(3);
   const [savedRange, setSavedRange] = useState<Range | null>(null);
   const colors = ['#000000', '#FFFFFF', '#EF4444', '#22C55E', '#3B82F6', '#F59E0B', '#A855F7', '#EC4899'];
+  const highlights = ['transparent', '#FEF08A', '#BBF7D0', '#BFDBFE', '#FBCFE8', '#FED7AA', '#E9D5FF'];
   
   const saveSelection = () => {
     const sel = window.getSelection();
@@ -105,6 +110,21 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
     }
   };
 
+  const handleInsertTable = () => {
+    restoreSelection();
+    let html = '<table class="w-full border-collapse border border-gray-600 my-4 text-left"><tbody>';
+    for(let i = 0; i < tableRows; i++) {
+        html += '<tr>';
+        for(let j = 0; j < tableCols; j++) {
+            html += `<td class="border border-gray-600 p-3 min-w-[50px]"><br></td>`;
+        }
+        html += '</tr>';
+    }
+    html += '</tbody></table><br>';
+    onInsertHtml(html);
+    setActivePopup(null);
+  };
+
   return (
     <div className="sticky top-4 md:top-[88px] z-40 bg-gray-900/95 backdrop-blur-md border border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-2xl rounded-2xl mb-4 transition-all">
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
@@ -123,12 +143,23 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
         <button onClick={() => executeFormat('bold')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Bold"><Bold className="w-4 h-4" /></button>
         <button onClick={() => executeFormat('italic')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Italic"><Italic className="w-4 h-4" /></button>
         <button onClick={() => executeFormat('underline')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Underline"><Underline className="w-4 h-4" /></button>
-        <button onClick={() => togglePopup('color')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Colors"><Palette className="w-4 h-4" /></button>
+        
+        <button onClick={() => togglePopup('color')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Text Color"><Palette className="w-4 h-4" /></button>
         {activePopup === 'color' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-3 shadow-2xl flex flex-col gap-3 z-50">
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Text Color</p>
             <div className="grid grid-cols-4 gap-2">
               {colors.map(c => <button key={c} onClick={() => executeFormat('foreColor', c)} className="w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition" style={{ backgroundColor: c }} />)}
+            </div>
+          </div>
+        )}
+
+        <button onClick={() => togglePopup('highlight')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Highlight Color"><Highlighter className="w-4 h-4" /></button>
+        {activePopup === 'highlight' && (
+          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-3 shadow-2xl flex flex-col gap-3 z-50">
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Highlight Color</p>
+            <div className="grid grid-cols-4 gap-2">
+              {highlights.map(c => <button key={c} onClick={() => executeFormat('backColor', c)} className={`w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition`} style={{ backgroundColor: c === 'transparent' ? '#374151' : c }} title={c === 'transparent' ? 'Clear Highlight' : c} />)}
             </div>
           </div>
         )}
@@ -141,6 +172,23 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
             <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Enter LaTeX Equation</label>
             <input autoFocus value={mathInput} onChange={e=>setMathInput(e.target.value)} onKeyDown={(e)=>e.key==='Enter'&&handleMathSubmit()} className="bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" placeholder="e.g. E = mc^2" />
             <button onClick={handleMathSubmit} className="bg-blue-500 text-white text-sm py-2 rounded-lg font-bold">Insert Equation</button>
+          </div>
+        )}
+
+        <button onClick={() => togglePopup('table')} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><TableIcon className="w-4 h-4 text-indigo-400" /> Table</button>
+        {activePopup === 'table' && (
+          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[220px]">
+             <div className="flex justify-between gap-4">
+               <div>
+                  <label className="text-xs text-gray-400 font-bold uppercase tracking-wider block mb-1">Rows</label>
+                  <input type="number" min="1" max="10" value={tableRows} onChange={e=>setTableRows(Number(e.target.value))} className="w-full bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" />
+               </div>
+               <div>
+                  <label className="text-xs text-gray-400 font-bold uppercase tracking-wider block mb-1">Cols</label>
+                  <input type="number" min="1" max="10" value={tableCols} onChange={e=>setTableCols(Number(e.target.value))} className="w-full bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" />
+               </div>
+             </div>
+             <button onClick={handleInsertTable} className="bg-indigo-500 text-white text-sm py-2 rounded-lg font-bold mt-2">Insert Table</button>
           </div>
         )}
 
@@ -174,6 +222,8 @@ export default function Dashboard() {
   const [currentStudySet, setCurrentStudySet] = useState<StudySet | null>(null);
   const [studyHistory, setStudyHistory] = useState<StudySet[]>([]);
   const [stats, setStats] = useState<UserStats>({ streak: 0, notes: 0, lastDate: null, monthlySets: {} });
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [activeFilterFolder, setActiveFilterFolder] = useState<string | null>(null);
   const [tier, setTier] = useState<'free' | 'pro'>('free');
   
   const [chatOpen, setChatOpen] = useState(false);
@@ -199,9 +249,14 @@ export default function Dashboard() {
   const [audioDuration, setAudioDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   
+  // Audio Ask Professor
   const [askModalOpen, setAskModalOpen] = useState(false);
-  const [askInput, setAskInput] = useState('');
+  const [isAskRecording, setIsAskRecording] = useState(false);
   const [askResponse, setAskResponse] = useState('');
+  const [isProfSpeaking, setIsProfSpeaking] = useState(false);
+  const askMediaRecorder = useRef<MediaRecorder | null>(null);
+  const askAudioChunks = useRef<Blob[]>([]);
+  const profPlaybackRef = useRef<HTMLAudioElement | null>(null);
 
   const loadingTips = [
     'Transmitting documents securely to AI Vision model...',
@@ -222,6 +277,16 @@ export default function Dashboard() {
           const p = snap.data();
           setProfile(p);
           setTier(p.is_pro ? 'pro' : 'free');
+          
+          if (p.stats) {
+            setStats(p.stats);
+            saveToStorage('hz_stats', p.stats);
+          }
+          if (p.folders) {
+            setFolders(p.folders);
+            saveToStorage('hz_folders', p.folders);
+          }
+
           if (p.is_pro) syncFromFirebase(u.uid);
         }
       }
@@ -229,8 +294,22 @@ export default function Dashboard() {
 
     setStudyHistory(safeParseJSON('hz_study_history', []));
     setStats(safeParseJSON('hz_stats', { streak: 0, notes: 0, lastDate: null, monthlySets: {} }));
+    setFolders(safeParseJSON('hz_folders', []));
+    
     return () => unsubscribe();
   }, []);
+
+  const saveStatsAndFolders = async (newStats: UserStats, newFolders: Folder[]) => {
+    setStats(newStats);
+    setFolders(newFolders);
+    saveToStorage('hz_stats', newStats);
+    saveToStorage('hz_folders', newFolders);
+    if (user) {
+      try {
+        await updateDoc(doc(db, 'profiles', user.uid), { stats: newStats, folders: newFolders });
+      } catch(e) {}
+    }
+  };
 
   const syncFromFirebase = async (userId: string) => {
     try {
@@ -272,6 +351,38 @@ export default function Dashboard() {
     } catch (e) {
       setSyncStatus('offline');
     }
+  };
+
+  const deleteStudySet = async (e: any, setId: number) => {
+    e.stopPropagation();
+    if(!confirm("Are you sure you want to delete this study set?")) return;
+    
+    const newHistory = studyHistory.filter(s => s.id !== setId);
+    setStudyHistory(newHistory);
+    saveToStorage('hz_study_history', newHistory);
+    
+    if (user && tier === 'pro') {
+      try {
+        await deleteDoc(doc(db, 'profiles', user.uid, 'study_sets', setId.toString()));
+      } catch(err) { console.error('Error deleting from cloud', err); }
+    }
+  };
+
+  const createNewFolder = () => {
+    const name = prompt("Enter folder name:");
+    if (!name) return;
+    const emoji = prompt("Enter an emoji for this folder (optional):") || "📁";
+    const newFolder: Folder = { id: Date.now().toString(), name, emoji };
+    const newFolders = [...folders, newFolder];
+    saveStatsAndFolders(stats, newFolders);
+  };
+
+  const assignFolderToSet = (setId: number, folderId: string) => {
+    const newHistory = studyHistory.map(s => s.id === setId ? { ...s, folderId: folderId || undefined } : s);
+    setStudyHistory(newHistory);
+    saveToStorage('hz_study_history', newHistory);
+    const updatedSet = newHistory.find(s => s.id === setId);
+    if(updatedSet && tier === 'pro') syncToFirebase(updatedSet);
   };
 
   const callLLM = async (systemPrompt: string, userText: string, files?: File[]) => {
@@ -329,7 +440,7 @@ export default function Dashboard() {
       }
     } 
     
-    const res = await fetch('/api/gemini/', {
+    const res = await fetch('/api/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ systemPrompt, userText }),
@@ -371,11 +482,12 @@ export default function Dashboard() {
 
     const flashcardCount = tier === 'pro' ? 15 : 5;
     const quizCount = tier === 'pro' ? 10 : 3;
+    const maxWords = tier === 'pro' ? 2200 : 300;
 
     try {
       if (inputMode === 'link') {
         const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
-        const ytRes = await fetch('/api/youtube/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: urlInput.value }) });
+        const ytRes = await fetch('/api/youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: urlInput.value }) });
         const ytData = await ytRes.json();
         if (ytData.error) throw new Error(ytData.error);
         finalContext += '\n' + ytData.text;
@@ -413,7 +525,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       let summaryClean = (parts[1] || '').replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*)/is, '').trim();
       parts[1] = summaryClean;
 
-      const podPrompt = `Convert this content into a teaching monologue for an audio podcast. Short sentences, conversational tone, plain text only. Content: ${parts[1] || finalContext.substring(0, 3000)}`;
+      const podPrompt = `Convert this content into a teaching monologue for an audio podcast. Short sentences, conversational tone, plain text only. Limit the script strictly to approximately ${maxWords} words to fit a ${tier === 'pro' ? '15' : '2'}-minute audio format. Content: ${parts[1] || finalContext.substring(0, 3000)}`;
       const podResult = await callLLM(podPrompt, '');
       const cleanPodResult = podResult.replace(/\*[^*]*\*/g, '').replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
 
@@ -437,8 +549,8 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       newStats.notes += 1;
       const month = getCurrentMonth();
       newStats.monthlySets[month] = (newStats.monthlySets[month] || 0) + 1;
-      setStats(newStats);
-      saveToStorage('hz_stats', newStats);
+      
+      saveStatsAndFolders(newStats, folders);
 
       setPdfFiles([]); setVoiceText(''); setIsLoading(false);
       loadStudySet(studySet);
@@ -480,7 +592,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         ...currentStudySet,
         id: Date.now(),
         title: `${currentStudySet.title} (${lang})`,
-        parts: newParts.length >= 5 ? newParts : currentStudySet.parts, // Fallback if splitting fails
+        parts: newParts.length >= 5 ? newParts : currentStudySet.parts, 
         podcast: newPodcastText ? newPodcastText.trim() : currentStudySet.podcast,
         date: new Date().toISOString(),
       };
@@ -580,6 +692,80 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     setIsAudioLoading(false);
   };
 
+  // --- Audio Voice Q&A Implementation ---
+  const toggleAskRecording = async () => {
+    if (isAskRecording) {
+        askMediaRecorder.current?.stop();
+        setIsAskRecording(false);
+    } else {
+        setAskResponse('');
+        stopProfSpeaking();
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            askMediaRecorder.current = new MediaRecorder(stream);
+            askAudioChunks.current = [];
+            askMediaRecorder.current.ondataavailable = e => askAudioChunks.current.push(e.data);
+            askMediaRecorder.current.onstop = async () => {
+                const audioBlob = new Blob(askAudioChunks.current, { type: 'audio/webm' });
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                reader.onloadend = async () => {
+                    const base64data = (reader.result as string).split(',')[1];
+                    await processVoiceQuestion(base64data, 'audio/webm');
+                };
+            };
+            askMediaRecorder.current.start();
+            setIsAskRecording(true);
+        } catch(e) { 
+            alert('Microphone access denied or not supported.'); 
+        }
+    }
+  };
+
+  const processVoiceQuestion = async (base64: string, mimeType: string) => {
+    setAskResponse('<span class="animate-pulse">Analyzing audio and thinking...</span>');
+    try {
+        const prompt = `You are Professor Hazel. The student is asking a verbal question. Use the notes context to answer concisely and naturally as if speaking.\n\nContext:\n${currentStudySet?.parts[2]}`;
+        const res = await fetch('/api/gemini', {
+            method: 'POST', body: JSON.stringify({ systemPrompt: prompt, userText: '', audioBase64: base64, audioMimeType: mimeType })
+        });
+        const data = await res.json();
+        if(data.error) throw new Error(data.error);
+        const textResponse = data.result;
+        setAskResponse(`<b>Professor Hazel:</b> ${textResponse}`);
+        
+        // Generate TTS for the response
+        const keyRes = await fetch('/api/gemini');
+        const keyData = await keyRes.json();
+        const payload = { contents: [{ parts: [{ text: textResponse }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } } };
+        const ttsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${keyData.apiKey}`, { method: 'POST', body: JSON.stringify(payload) });
+        const ttsData = await ttsRes.json();
+        const audioBase64 = ttsData.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        
+        if (audioBase64) {
+            const wavBlob = pcmToWav(base64ToArrayBuffer(audioBase64), 24000);
+            const urlBlob = URL.createObjectURL(wavBlob);
+            if (!profPlaybackRef.current) {
+                profPlaybackRef.current = new Audio();
+                profPlaybackRef.current.onended = () => setIsProfSpeaking(false);
+            }
+            profPlaybackRef.current.src = urlBlob;
+            profPlaybackRef.current.play();
+            setIsProfSpeaking(true);
+        }
+    } catch(e: any) {
+        setAskResponse(`<span class="text-red-400">Error: ${e.message}</span>`);
+    }
+  };
+
+  const stopProfSpeaking = () => {
+    if (profPlaybackRef.current) {
+        profPlaybackRef.current.pause();
+        profPlaybackRef.current.currentTime = 0;
+        setIsProfSpeaking(false);
+    }
+  };
+
   const handleAskProfessor = () => {
     if (audioRef.current && isPlaying) {
       audioRef.current.pause();
@@ -587,20 +773,9 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     }
     setAskModalOpen(true);
     setAskResponse('');
-    setAskInput('');
+    stopProfSpeaking();
   };
-
-  const submitAsk = async () => {
-    if(!askInput.trim()) return;
-    setAskResponse('<span class="animate-pulse">Thinking...</span>');
-    try {
-      const prompt = `You are Professor Hazel. The student paused their podcast to ask a question. Use the notes context to answer it thoroughly but concisely.\n\nContext:\n${currentStudySet?.parts[2]}`;
-      const res = await callLLM(prompt, askInput);
-      setAskResponse(renderMarkdownWithMath(res));
-    } catch (e: any) {
-      setAskResponse(`<span class="text-red-400">Error: ${e.message}</span>`);
-    }
-  };
+  // --------------------------------------
 
   const sendChatMessage = async () => {
     if (!chatInput.trim() || !currentStudySet) return;
@@ -628,7 +803,6 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     }
   };
 
-  // Dedicated Viewers for Reactivity
   const FlashcardsViewer = ({ text }: { text: string }) => {
     const lines = text.split('\n');
     const cards: { question: string; answer: string }[] = [];
@@ -827,7 +1001,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
               )}
             </div>
 
-            <div className="glass-card p-8 md:p-12 text-center relative overflow-hidden bg-gray-800/50 backdrop-blur-lg border-gray-700">
+            <div className="glass-card p-8 md:p-12 text-center relative overflow-hidden bg-gray-800/50 backdrop-blur-lg border-gray-700 mb-10">
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-blue-500"></div>
               <div className="w-20 h-20 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-green-400"><Sparkles className="w-10 h-10" /></div>
               <h3 className="text-2xl font-bold text-white mb-2">Ready to learn something new?</h3>
@@ -835,14 +1009,54 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
               <button onClick={() => setCurrentView('create')} className="btn-primary px-10 py-4 text-lg shadow-xl">Create New Study Set</button>
             </div>
 
-            <div className="mt-10 space-y-4">
-              <h3 className="text-2xl font-bold text-white mb-6">Recent Study Sets</h3>
-              {studyHistory.length === 0 ? <p className="text-gray-500 text-center py-8">No study sets yet. Create your first one!</p> : (
-                studyHistory.slice(0, 10).map(set => (
+            <div className="mb-4">
+              <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                <button 
+                   onClick={() => setActiveFilterFolder(null)} 
+                   className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap transition-colors ${activeFilterFolder === null ? 'bg-green-500 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-400'}`}
+                >
+                   All Sets
+                </button>
+                {folders.map(f => (
+                   <button 
+                     key={f.id} 
+                     onClick={() => setActiveFilterFolder(f.id)} 
+                     className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap flex items-center gap-2 transition-colors ${activeFilterFolder === f.id ? 'bg-green-500 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-400'}`}
+                   >
+                     <span>{f.emoji}</span> {f.name}
+                   </button>
+                ))}
+                <button onClick={createNewFolder} className="px-4 py-2 rounded-full font-bold text-sm bg-gray-800/50 hover:bg-gray-700 text-gray-400 flex items-center gap-1 border border-dashed border-gray-600 whitespace-nowrap">
+                   <PlusCircle className="w-4 h-4"/> New Folder
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold text-white mb-4">Study Sets</h3>
+              {studyHistory.filter(s => activeFilterFolder ? s.folderId === activeFilterFolder : true).length === 0 ? (
+                 <p className="text-gray-500 text-center py-8 bg-gray-800/30 rounded-2xl border border-dashed border-gray-700">No study sets found in this view.</p>
+              ) : (
+                studyHistory
+                  .filter(s => activeFilterFolder ? s.folderId === activeFilterFolder : true)
+                  .slice(0, 10)
+                  .map(set => (
                   <div key={set.id} onClick={() => loadStudySet(set)} className="glass-card p-5 hover:shadow-lg transition cursor-pointer bg-gray-800/50 backdrop-blur-lg border-gray-700">
                     <div className="flex justify-between items-start mb-2">
                       <h4 className="font-bold text-white flex-1 mr-2">{set.title}</h4>
-                      <button onClick={(e) => { e.stopPropagation(); const n = studyHistory.filter(s=>s.id!==set.id); setStudyHistory(n); saveToStorage('hz_study_history', n); }} className="text-gray-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                      <div className="flex items-center gap-3">
+                         <select 
+                            value={set.folderId || ''} 
+                            onClick={(e) => e.stopPropagation()} 
+                            onChange={(e) => assignFolderToSet(set.id, e.target.value)}
+                            className="bg-gray-900 text-xs text-gray-400 font-bold rounded-lg px-2 py-1.5 border border-gray-700 outline-none hover:bg-gray-700 transition"
+                            title="Move to folder"
+                         >
+                            <option value="">No Folder</option>
+                            {folders.map(f => <option key={f.id} value={f.id}>{f.emoji} {f.name}</option>)}
+                         </select>
+                         <button onClick={(e) => deleteStudySet(e, set.id)} className="text-gray-500 hover:text-red-400 transition p-1.5 bg-gray-900 hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                      </div>
                     </div>
                     <p className="text-sm text-gray-400 mb-3">{set.summary}</p>
                     <div className="flex gap-3 text-xs flex-wrap">
@@ -931,7 +1145,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                 <div className="flex flex-wrap gap-2 w-full md:w-auto">
                   <button onClick={() => window.print()} className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-gray-600"><Printer className="w-4 h-4" /> Export PDF</button>
                   <button onClick={() => setTranslateModalOpen(true)} className="text-sm bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-blue-800"><Languages className="w-4 h-4" /> Translate</button>
-                  <button onClick={() => { setSidebarCollapsed(true); setChatOpen(true); }} className="text-sm bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition shadow-md border border-green-600"><img src="/hazelnote_tutor.png" className="w-5 h-5 rounded-full object-cover bg-white border border-green-400" /> Chat</button>
+                  <button onClick={() => { setSidebarCollapsed(true); setChatOpen(true); }} className="text-sm bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition shadow-md border border-green-600"><img src="/hazelnote_tutor.png" className="w-5 h-5 rounded-full object-cover bg-white border border-green-400" /> Chat with Professor Hazel</button>
                 </div>
               </div>
 
@@ -999,7 +1213,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                         {isPlaying && <div className="absolute inset-0 rounded-full border-4 border-white/30 animate-ping"></div>}
                       </div>
                       <h3 className="text-3xl font-extrabold mb-2">Audio Lesson</h3>
-                      <p className="text-indigo-200 mb-8 max-w-md mx-auto text-sm">Listen to a custom AI-generated teaching monologue based on your notes.</p>
+                      <p className="text-indigo-200 mb-8 max-w-md mx-auto text-sm">Listen to a custom AI-generated teaching monologue based on your notes. ({tier === 'pro' ? 'Max 15 Mins' : 'Max 2 Mins'})</p>
                       
                       <div className="flex flex-col items-center gap-6">
                         <audio 
@@ -1030,9 +1244,9 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                         {tier === 'pro' && (
                           <div className="pt-6 border-t border-indigo-500/30 w-full mt-4">
                             <button onClick={handleAskProfessor} className="flex items-center justify-center gap-2 mx-auto bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold transition shadow-md">
-                              <MessageCircleQuestion className="w-5 h-5" /> Ask Professor (Pro)
+                              <MessageCircleQuestion className="w-5 h-5" /> Ask Professor (Audio Q&A)
                             </button>
-                            <p className="text-xs text-indigo-300 mt-2">Pause and ask AI a question about this segment.</p>
+                            <p className="text-xs text-indigo-300 mt-2">Pause and ask AI a question using your microphone.</p>
                           </div>
                         )}
                       </div>
@@ -1094,22 +1308,40 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         </div>
       )}
 
+      {/* Audio Ask Professor Modal */}
       {askModalOpen && (
         <div className="fixed inset-0 bg-gray-900/80 z-50 flex items-center justify-center backdrop-blur-md p-4">
           <div className="bg-gray-800 rounded-[32px] w-full max-w-lg shadow-2xl border border-gray-700 flex flex-col max-h-[90vh]">
              <div className="p-6 border-b border-gray-700 flex justify-between items-center">
-                <h3 className="font-extrabold text-xl text-white flex items-center gap-2"><MessageCircleQuestion className="text-indigo-400" /> Ask Professor (Audio Paused)</h3>
-                <button onClick={() => setAskModalOpen(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+                <h3 className="font-extrabold text-xl text-white flex items-center gap-2"><MessageCircleQuestion className="text-indigo-400" /> Audio Q&A with Professor</h3>
+                <button onClick={() => { setAskModalOpen(false); stopProfSpeaking(); }} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
              </div>
-             <div className="p-6 flex-1 overflow-y-auto space-y-4">
-                <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-700">
-                   <p className="text-sm text-gray-400 font-bold mb-2">Your Question:</p>
-                   <textarea value={askInput} onChange={(e) => setAskInput(e.target.value)} placeholder="Type what you didn't understand..." className="w-full bg-gray-700 text-white p-3 rounded-xl border border-gray-600 min-h-[100px] focus:outline-none focus:border-indigo-500"></textarea>
-                   <button onClick={submitAsk} className="mt-3 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold w-full transition shadow">Submit Question</button>
+             <div className="p-6 flex-1 overflow-y-auto flex flex-col items-center">
+                <p className="text-sm text-gray-400 mb-8 text-center">Tap the microphone and ask your question aloud.</p>
+                
+                <button 
+                   onClick={toggleAskRecording}
+                   className={`w-24 h-24 rounded-full flex items-center justify-center transition-all shadow-xl ${isAskRecording ? 'bg-red-500 animate-pulse' : 'bg-indigo-600 hover:bg-indigo-500 hover:scale-105'}`}
+                >
+                   {isAskRecording ? <Square className="w-10 h-10 text-white" /> : <Mic className="w-10 h-10 text-white" />}
+                </button>
+                <div className="mt-4 font-bold text-lg text-white">
+                   {isAskRecording ? 'Listening... Tap to stop' : 'Tap to start recording'}
                 </div>
+
                 {askResponse && (
-                  <div className="bg-indigo-900/20 border border-indigo-800/50 p-5 rounded-xl">
-                     <div className="flex items-center gap-2 mb-3"><img src="/hazelnote_tutor.png" className="w-6 h-6 rounded-full bg-white" /><span className="text-indigo-300 font-bold text-sm">Professor Hazel:</span></div>
+                  <div className="mt-8 w-full bg-indigo-900/20 border border-indigo-800/50 p-5 rounded-xl text-left animate-slide-in relative">
+                     <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                           <img src="/hazelnote_tutor.png" className="w-6 h-6 rounded-full bg-white" />
+                           <span className="text-indigo-300 font-bold text-sm">Professor Hazel</span>
+                        </div>
+                        {isProfSpeaking && (
+                           <button onClick={stopProfSpeaking} className="text-red-400 hover:text-red-300 flex items-center gap-1 text-xs font-bold bg-red-900/30 px-2 py-1 rounded">
+                             <StopCircle className="w-4 h-4" /> Stop
+                           </button>
+                        )}
+                     </div>
                      <div className="text-gray-200 text-sm leading-relaxed prose-sm prose-invert" dangerouslySetInnerHTML={{__html: askResponse}} />
                   </div>
                 )}
