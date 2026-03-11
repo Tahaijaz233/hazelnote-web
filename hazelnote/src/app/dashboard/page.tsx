@@ -389,64 +389,86 @@ export default function Dashboard() {
     if (files && files.length > 0) {
       const keyRes = await fetch('/api/gemini');
       const keyData = await keyRes.json();
-      if (keyData.error || !keyData.apiKey) throw new Error("Could not retrieve Gemini API key");
-      
-      const apiKey = keyData.apiKey;
-      const uploadedFilesToCleanup = [];
+      if (keyData.error || (!keyData.apiKeys && !keyData.apiKey)) throw new Error("Could not retrieve Gemini API keys");
 
-      try {
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          const uploadRes = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'X-Goog-Upload-Protocol': 'raw', 'X-Goog-Upload-Header-Content-Type': file.type || 'application/pdf', 'Content-Type': file.type || 'application/pdf' },
-            body: file
+      const apiKeys = keyData.apiKeys || [keyData.apiKey];
+      let lastErrorMsg = '';
+
+      // MULTI-KEY FALLBACK LOOP
+      for (const apiKey of apiKeys) {
+        const uploadedFilesToCleanup: string[] = [];
+        try {
+          // 1. Upload files
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const uploadRes = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'X-Goog-Upload-Protocol': 'raw', 'X-Goog-Upload-Header-Content-Type': file.type || 'application/pdf', 'Content-Type': file.type || 'application/pdf' },
+              body: file
+            });
+            const uploadData = await uploadRes.json();
+            if (!uploadRes.ok || !uploadData.file) throw new Error(uploadData.error?.message || `Upload failed`);
+            uploadedFilesToCleanup.push(uploadData.file.name);
+            let state = uploadData.file.state;
+            while (state === 'PROCESSING') {
+              await new Promise(r => setTimeout(r, 3000));
+              const checkRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${uploadData.file.name}?key=${apiKey}`);
+              const checkData = await checkRes.json();
+              state = checkData.state;
+              if (state === 'FAILED') throw new Error("AI failed to process the document.");
+            }
+          }
+
+          // 2. Generate Content
+          const contents: any[] = [{ parts: [] }];
+          uploadedFilesToCleanup.forEach(fileName => {
+            contents[0].parts.push({ fileData: { mimeType: 'application/pdf', fileUri: `https://generativelanguage.googleapis.com/v1beta/${fileName}` } });
           });
-          const uploadData = await uploadRes.json();
-          if (!uploadRes.ok || !uploadData.file) throw new Error(`Upload failed`);
-          uploadedFilesToCleanup.push(uploadData.file.name);
-          let state = uploadData.file.state;
-          while (state === 'PROCESSING') {
-            await new Promise(r => setTimeout(r, 3000));
-            const checkRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/${uploadData.file.name}?key=${apiKey}`);
-            const checkData = await checkRes.json();
-            state = checkData.state;
-            if (state === 'FAILED') throw new Error("AI failed to process the document.");
+          let combinedText = systemPrompt || '';
+          if (userText) combinedText += '\n\nCONTEXT:\n' + userText;
+          if (combinedText) contents[0].parts.push({ text: combinedText });
+
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 8192, temperature: 0.7 } })
+          });
+
+          const data = await response.json();
+          if (!response.ok || data.error) throw new Error(data.error?.message || "Gemini API Error");
+
+          // Success: Clean up files explicitly for this key before returning
+          for (const fileName of uploadedFilesToCleanup) {
+            try { await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`, { method: 'DELETE' }); } catch(e) {}
+          }
+          return data.candidates[0].content.parts[0].text;
+
+        } catch (e: any) {
+          lastErrorMsg = e.message;
+          // Clean up files we just uploaded before falling back to the next key
+          for (const fileName of uploadedFilesToCleanup) {
+            try { await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`, { method: 'DELETE' }); } catch(cleanupErr) {}
+          }
+
+          const errorString = lastErrorMsg.toLowerCase();
+          if (errorString.includes('quota') || errorString.includes('exceeded') || errorString.includes('429') || errorString.includes('rate limit')) {
+            console.warn(`Key quota exceeded, trying next key...`);
+            continue; // Try next key
+          } else {
+            throw e; // Non-quota error, throw immediately
           }
         }
-
-        const contents: any[] = [{ parts: [] }];
-        uploadedFilesToCleanup.forEach(fileName => {
-          contents[0].parts.push({ fileData: { mimeType: 'application/pdf', fileUri: `https://generativelanguage.googleapis.com/v1beta/${fileName}` } });
-        });
-        let combinedText = systemPrompt || '';
-        if (userText) combinedText += '\n\nCONTEXT:\n' + userText;
-        if (combinedText) contents[0].parts.push({ text: combinedText });
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 8192, temperature: 0.7 } })
-        });
-
-        const data = await response.json();
-        if (!response.ok || data.error) throw new Error(data.error?.message || "Gemini API Error");
-        return data.candidates[0].content.parts[0].text;
-
-      } finally {
-        for (const fileName of uploadedFilesToCleanup) {
-          try { await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`, { method: 'DELETE' }); } catch(e) {}
-        }
       }
+      throw new Error(`All backup API keys exhausted. Last error: ${lastErrorMsg}`);
     } 
     
+    // Server-side fallback handles text-only requests
     const res = await fetch('/api/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ systemPrompt, userText }),
     });
-    const textResponse = await res.text();
-    const data = JSON.parse(textResponse);
+    const data = await res.json();
     if (data.error) throw new Error(data.error);
     return data.result;
   };
@@ -665,20 +687,40 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     try {
       const keyRes = await fetch('/api/gemini');
       const keyData = await keyRes.json();
-      const apiKey = keyData.apiKey;
+      const apiKeys = keyData.apiKeys || [keyData.apiKey];
 
       const payload = {
           contents: [{ parts: [{ text: currentStudySet.podcast }] }],
           generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } }
       };
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
-          method: 'POST', body: JSON.stringify(payload)
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error?.message || "Failed to generate audio");
+      let successData = null;
+      let lastErrorMsg = '';
 
-      const base64 = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      for (const apiKey of apiKeys) {
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
+              method: 'POST', body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (!res.ok || data.error) throw new Error(data.error?.message || "Failed to generate audio");
+          successData = data;
+          break; // Audio generated successfully!
+        } catch(e: any) {
+          lastErrorMsg = e.message;
+          const errorString = lastErrorMsg.toLowerCase();
+          if (errorString.includes('quota') || errorString.includes('exceeded') || errorString.includes('429')) {
+             console.warn("TTS Quota exceeded. Retrying with next backup key...");
+             continue; // Try next key
+          } else {
+             throw e; // Non-quota error
+          }
+        }
+      }
+
+      if (!successData) throw new Error(`Audio generation failed across all backup keys. Last error: ${lastErrorMsg}`);
+
+      const base64 = successData.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if(!base64) throw new Error("No audio payload returned");
       
       const wavBlob = pcmToWav(base64ToArrayBuffer(base64), 24000);
@@ -734,12 +776,32 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         const textResponse = data.result;
         setAskResponse(`<b>Professor Hazel:</b> ${textResponse}`);
         
-        // Generate TTS for the response
+        // Generate TTS for the response using Backup Keys Loop
         const keyRes = await fetch('/api/gemini');
         const keyData = await keyRes.json();
+        const apiKeys = keyData.apiKeys || [keyData.apiKey];
+        
         const payload = { contents: [{ parts: [{ text: textResponse }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } } };
-        const ttsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${keyData.apiKey}`, { method: 'POST', body: JSON.stringify(payload) });
-        const ttsData = await ttsRes.json();
+        
+        let ttsData = null;
+        let lastErrorMsg = '';
+
+        for (const apiKey of apiKeys) {
+           try {
+              const ttsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, { method: 'POST', body: JSON.stringify(payload) });
+              const data = await ttsRes.json();
+              if(!ttsRes.ok || data.error) throw new Error(data.error?.message || "TTS error");
+              ttsData = data;
+              break;
+           } catch(e: any) {
+              lastErrorMsg = e.message;
+              if (lastErrorMsg.toLowerCase().includes('quota') || lastErrorMsg.toLowerCase().includes('exceeded') || lastErrorMsg.includes('429')) continue;
+              throw e;
+           }
+        }
+        
+        if (!ttsData) throw new Error(`TTS failed across all keys: ${lastErrorMsg}`);
+
         const audioBase64 = ttsData.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
         
         if (audioBase64) {
