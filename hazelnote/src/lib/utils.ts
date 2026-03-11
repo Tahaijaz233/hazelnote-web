@@ -1,4 +1,5 @@
 import { marked } from 'marked';
+import katex from 'katex';
 
 export function safeParseJSON<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
@@ -19,26 +20,39 @@ export function saveToStorage(key: string, value: unknown): void {
 export function renderMarkdownWithMath(text: string): string {
   if (!text) return '';
   
-  const mathStore: string[] = [];
+  const mathStore: { type: 'inline' | 'block', math: string }[] = [];
   
-  // Store math blocks
-  text = text.replace(/\$\$([\s\S]*?)\$\$/g, (match) => {
-    mathStore.push(match);
+  // Store math blocks securely
+  let processedText = text.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+    mathStore.push({ type: 'block', math });
     return `MATHBLOCK_${mathStore.length - 1}_END`;
   });
   
-  // Store inline math
-  text = text.replace(/\$([^$\n]+?)\$/g, (match) => {
-    mathStore.push(match);
+  // Store inline math securely
+  processedText = processedText.replace(/\$([^$\n]+?)\$/g, (match, math) => {
+    mathStore.push({ type: 'inline', math });
     return `MATHINLINE_${mathStore.length - 1}_END`;
   });
   
   // Parse markdown
-  let html = marked.parse(text) as string;
+  let html = marked.parse(processedText) as string;
   
-  // Restore math blocks
-  html = html.replace(/MATHBLOCK_(\d+)_END/g, (_, i) => mathStore[parseInt(i)]);
-  html = html.replace(/MATHINLINE_(\d+)_END/g, (_, i) => mathStore[parseInt(i)]);
+  // Restore and officially render math blocks using KaTeX
+  html = html.replace(/MATHBLOCK_(\d+)_END/g, (_, i) => {
+    try {
+      return katex.renderToString(mathStore[parseInt(i)].math, { displayMode: true, throwOnError: false });
+    } catch {
+      return `$$${mathStore[parseInt(i)].math}$$`; // Fallback if KaTeX fails
+    }
+  });
+  
+  html = html.replace(/MATHINLINE_(\d+)_END/g, (_, i) => {
+    try {
+      return katex.renderToString(mathStore[parseInt(i)].math, { displayMode: false, throwOnError: false });
+    } catch {
+      return `$${mathStore[parseInt(i)].math}$`; // Fallback if KaTeX fails
+    }
+  });
   
   return html;
 }
