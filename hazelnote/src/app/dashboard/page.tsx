@@ -41,112 +41,74 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { StudySet, UserStats } from '@/types';
 import { safeParseJSON, saveToStorage, renderMarkdownWithMath, getCurrentMonth } from '@/lib/utils';
 
-// Note editor toolbar component for Pro users
+// Real Rich-Text Editor Toolbar
 const NoteEditorToolbar = ({ 
   onFormat, 
   onInsertMath, 
   onInsertImage, 
   onInsertTable, 
   onAddComment,
-  fontSize,
-  setFontSize,
-  fontColor,
-  setFontColor,
-  highlightColor,
-  setHighlightColor,
 }: {
-  onFormat: (format: string) => void;
+  onFormat: (command: string, value?: string) => void;
   onInsertMath: () => void;
   onInsertImage: () => void;
   onInsertTable: () => void;
   onAddComment: () => void;
-  fontSize: number;
-  setFontSize: (size: number) => void;
-  fontColor: string;
-  setFontColor: (color: string) => void;
-  highlightColor: string;
-  setHighlightColor: (color: string) => void;
 }) => {
-  const colors = ['#000000', '#FF0000', '#00FF00', '#0000FF', '#FFA500', '#800080', '#FFC0CB'];
-  const highlightColors = ['transparent', '#FFFF00', '#00FFFF', '#FF00FF', '#90EE90', '#FFB6C1'];
+  const colors = ['#000000', '#FFFFFF', '#EF4444', '#22C55E', '#3B82F6', '#F59E0B', '#A855F7', '#EC4899'];
+  const highlightColors = ['transparent', '#FEF08A', '#A7F3D0', '#BFDBFE', '#FBCFE8', '#E9D5FF'];
 
   return (
-    <div className="sticky top-0 z-20 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-sm">
+    <div className="sticky top-0 z-20 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-sm rounded-t-2xl">
       <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
         <select 
-          value={fontSize} 
-          onChange={(e) => setFontSize(Number(e.target.value))}
-          className="text-sm border border-gray-200 dark:border-gray-600 rounded px-2 py-1 bg-gray-50 dark:bg-gray-700 dark:text-white"
+          onChange={(e) => onFormat('fontSize', e.target.value)}
+          className="text-sm border border-gray-200 dark:border-gray-600 rounded px-2 py-1 bg-gray-50 dark:bg-gray-700 dark:text-white focus:outline-none"
+          defaultValue="3"
         >
-          <option value={12}>12px</option>
-          <option value={14}>14px</option>
-          <option value={16}>16px</option>
-          <option value={18}>18px</option>
-          <option value={20}>20px</option>
-          <option value={24}>24px</option>
+          <option value="1">Small</option>
+          <option value="3">Normal</option>
+          <option value="5">Large</option>
+          <option value="7">Huge</option>
         </select>
       </div>
       
       <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
-        <button onClick={() => onFormat('bold')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Bold">
-          <Bold className="w-4 h-4" />
-        </button>
-        <button onClick={() => onFormat('italic')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Italic">
-          <Italic className="w-4 h-4" />
-        </button>
-        <button onClick={() => onFormat('underline')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded" title="Underline">
-          <Underline className="w-4 h-4" />
-        </button>
+        <button onClick={() => onFormat('bold')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300" title="Bold"><Bold className="w-4 h-4" /></button>
+        <button onClick={() => onFormat('italic')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300" title="Italic"><Italic className="w-4 h-4" /></button>
+        <button onClick={() => onFormat('underline')} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-gray-700 dark:text-gray-300" title="Underline"><Underline className="w-4 h-4" /></button>
       </div>
 
       <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
-        <span className="text-xs text-gray-500">Color:</span>
-        <div className="flex gap-1">
+        <span className="text-xs text-gray-500 font-medium ml-1">Text:</span>
+        <div className="flex gap-1 ml-1">
           {colors.map(c => (
-            <button
-              key={c}
-              onClick={() => setFontColor(c)}
-              className={`w-5 h-5 rounded-full border ${fontColor === c ? 'ring-2 ring-offset-1 ring-blue-500' : ''}`}
-              style={{ backgroundColor: c }}
-            />
+            <button key={`c-${c}`} onClick={() => onFormat('foreColor', c)} className="w-5 h-5 rounded-full border border-gray-300 shadow-sm" style={{ backgroundColor: c }} title={`Text Color ${c}`} />
           ))}
         </div>
       </div>
 
       <div className="flex items-center gap-1 border-r border-gray-200 dark:border-gray-700 pr-2">
-        <span className="text-xs text-gray-500">Highlight:</span>
-        <div className="flex gap-1">
+        <span className="text-xs text-gray-500 font-medium ml-1">Highlight:</span>
+        <div className="flex gap-1 ml-1">
           {highlightColors.map(c => (
-            <button
-              key={c}
-              onClick={() => setHighlightColor(c)}
-              className={`w-5 h-5 rounded-full border ${highlightColor === c ? 'ring-2 ring-offset-1 ring-blue-500' : ''} ${c === 'transparent' ? 'bg-gray-200' : ''}`}
-              style={{ backgroundColor: c === 'transparent' ? 'transparent' : c }}
-            >
-              {c === 'transparent' && <span className="text-xs">✕</span>}
+            <button key={`h-${c}`} onClick={() => onFormat('hiliteColor', c === 'transparent' ? '#ffffff' : c)} className={`w-5 h-5 rounded-full border border-gray-300 shadow-sm ${c === 'transparent' ? 'bg-white flex items-center justify-center' : ''}`} style={{ backgroundColor: c === 'transparent' ? 'transparent' : c }} title={`Highlight ${c}`}>
+              {c === 'transparent' && <span className="text-[10px] text-gray-400">✕</span>}
             </button>
           ))}
         </div>
       </div>
 
       <div className="flex items-center gap-1">
-        <button onClick={onInsertMath} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm" title="Insert Math">
-          <FunctionSquare className="w-4 h-4" /> Math
-        </button>
-        <button onClick={onInsertImage} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm" title="Insert Image">
-          <ImageIcon className="w-4 h-4" /> Image
-        </button>
-        <button onClick={onInsertTable} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm" title="Insert Table">
-          <Table className="w-4 h-4" /> Table
-        </button>
-        <button onClick={onAddComment} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm" title="Add Comment">
-          <MessageSquare className="w-4 h-4" /> Comment
-        </button>
+        <button onClick={onInsertMath} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 font-medium"><FunctionSquare className="w-4 h-4 text-blue-500" /> Math</button>
+        <button onClick={onInsertImage} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 font-medium"><ImageIcon className="w-4 h-4 text-green-500" /> Image</button>
+        <button onClick={onInsertTable} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 font-medium"><Table className="w-4 h-4 text-orange-500" /> Table</button>
+        <button onClick={onAddComment} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-700 dark:text-gray-300 font-medium"><MessageSquare className="w-4 h-4 text-purple-500" /> Comment</button>
       </div>
     </div>
   );
@@ -162,7 +124,6 @@ export default function Dashboard() {
   const [currentTab, setCurrentTab] = useState<'notes' | 'flashcards' | 'quiz' | 'podcast'>('notes');
   const [inputMode, setInputMode] = useState<'pdf' | 'voice' | 'link'>('pdf');
   
-  // Notice we now just store the RAW Javascript `File` object, keeping browser memory clean!
   const [pdfFiles, setPdfFiles] = useState<File[]>([]); 
   const [voiceText, setVoiceText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -181,11 +142,10 @@ export default function Dashboard() {
   // Podcast state
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('');
   
   // Pro note editing state
-  const [fontSize, setFontSize] = useState(16);
-  const [fontColor, setFontColor] = useState('#000000');
-  const [highlightColor, setHighlightColor] = useState('transparent');
   const [editedNotes, setEditedNotes] = useState<string>('');
   const [isEditing, setIsEditing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('offline');
@@ -225,12 +185,27 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
+  // Fetch actual valid local system voices
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+      if (voices.length > 0 && !selectedVoiceURI) {
+        // Find best default voice (Natural / Google / System English)
+        const bestVoice = voices.find(v => (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha')) && v.lang.startsWith('en')) || voices[0];
+        setSelectedVoiceURI(bestVoice.voiceURI);
+      }
+    };
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, [selectedVoiceURI]);
+
+  // Fixed paths to match user's rules: match /profiles/{userId} { match /study_sets/{setId} }
   const syncFromFirebase = async (userId: string) => {
     try {
       setSyncStatus('syncing');
-      const studySetsRef = collection(db, 'studySets');
-      const q = query(studySetsRef, where('userId', '==', userId));
-      const querySnapshot = await getDocs(q);
+      const studySetsRef = collection(db, 'profiles', userId, 'study_sets');
+      const querySnapshot = await getDocs(studySetsRef);
       
       const firebaseSets: StudySet[] = [];
       querySnapshot.forEach((doc) => {
@@ -257,7 +232,7 @@ export default function Dashboard() {
     if (!user || tier !== 'pro') return;
     try {
       setSyncStatus('syncing');
-      const studySetRef = doc(db, 'studySets', `${user.uid}_${studySet.id}`);
+      const studySetRef = doc(db, 'profiles', user.uid, 'study_sets', studySet.id.toString());
       await setDoc(studySetRef, {
         ...studySet,
         userId: user.uid,
@@ -285,7 +260,6 @@ export default function Dashboard() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Up to 100MB for Pro, 10MB for free
     const maxMB = tier === 'free' ? 10 : 100; 
     const MAX_SAFE_SIZE = maxMB * 1024 * 1024;
     
@@ -296,7 +270,7 @@ export default function Dashboard() {
         alert(`File ${file.name} exceeds your limit of ${maxMB}MB.`);
         continue;
       }
-      newFiles.push(file); // Store raw file, NOT Base64
+      newFiles.push(file);
     }
 
     const currentTotalSize = pdfFiles.reduce((acc, file) => acc + file.size, 0);
@@ -314,14 +288,10 @@ export default function Dashboard() {
     setPdfFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  // THE MAGIC HAPPENS HERE
   const callLLM = async (systemPrompt: string, userText: string, files?: File[]) => {
-    
-    // IF WE HAVE FILES: We upload directly to Gemini File API using chunked raw data
     if (files && files.length > 0) {
       setLoadingTip('Securing connection to Google AI servers...');
       
-      // Step 1: Securely fetch the API key from our backend route
       const keyRes = await fetch('/api/gemini');
       const keyData = await keyRes.json();
       if (keyData.error || !keyData.apiKey) throw new Error("Could not retrieve Gemini API key");
@@ -330,7 +300,6 @@ export default function Dashboard() {
       const uploadedFilesToCleanup = [];
 
       try {
-        // Step 2: Upload each raw File natively to Gemini (Supporting huge 100MB+ files)
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
           setLoadingTip(`Uploading document ${i + 1} of ${files.length} to AI natively (${(file.size/1024/1024).toFixed(1)}MB)...`);
@@ -342,7 +311,7 @@ export default function Dashboard() {
               'X-Goog-Upload-Header-Content-Type': file.type || 'application/pdf',
               'Content-Type': file.type || 'application/pdf',
             },
-            body: file // Passing the raw Blob directly to Google
+            body: file
           });
 
           const uploadData = await uploadRes.json();
@@ -351,10 +320,8 @@ export default function Dashboard() {
           }
 
           const fileName = uploadData.file.name;
-          const fileUri = uploadData.file.uri;
-          uploadedFilesToCleanup.push(fileName); // Track for cleanup later
+          uploadedFilesToCleanup.push(fileName);
 
-          // Step 3: Wait for Gemini to finish processing large PDFs
           setLoadingTip(`AI is processing document ${i + 1}... This can take a moment for large files.`);
           let state = uploadData.file.state;
           while (state === 'PROCESSING') {
@@ -366,13 +333,10 @@ export default function Dashboard() {
           }
         }
 
-        // Step 4: Build the payload and request Content Generation
         setLoadingTip('Synthesizing study set via Gemini AI...');
         const contents: any[] = [{ parts: [] }];
         
         uploadedFilesToCleanup.forEach(fileName => {
-          // Note: Gemini uses file.uri to reference the file during generation
-          // We can construct the URI easily from the name
           contents[0].parts.push({ 
             fileData: { 
               mimeType: 'application/pdf', 
@@ -400,12 +364,9 @@ export default function Dashboard() {
         return data.candidates[0].content.parts[0].text;
 
       } finally {
-        // Step 5: Always clean up the massive files from Gemini's temp storage to save quotas
         for (const fileName of uploadedFilesToCleanup) {
           try {
-            await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`, {
-              method: 'DELETE'
-            });
+            await fetch(`https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${apiKey}`, { method: 'DELETE' });
           } catch(e) {
              console.error("Cleanup failed for", fileName);
           }
@@ -413,7 +374,6 @@ export default function Dashboard() {
       }
     } 
     
-    // IF NO FILES (Chat, Quizzes, Podcast): Safely route through our Next.js backend
     const res = await fetch('/api/gemini/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -425,7 +385,7 @@ export default function Dashboard() {
     try {
       data = JSON.parse(textResponse);
     } catch (e) {
-      throw new Error(`Server returned an invalid response. Error: ${textResponse.substring(0, 50)}...`);
+      throw new Error(`Server returned an invalid response.`);
     }
 
     if (data.error) {
@@ -478,7 +438,6 @@ export default function Dashboard() {
     const quizCount = tier === 'pro' ? 10 : 3;
 
     try {
-      // Grab YouTube text if needed
       if (inputMode === 'link') {
         setLoadingTip('Fetching YouTube transcript directly...');
         const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
@@ -492,35 +451,19 @@ export default function Dashboard() {
         finalContext += '\n' + ytData.text;
       }
 
-      const mainPrompt = `You are an expert tutor and instructional designer. Create highly structured, comprehensive study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===". Do NOT deviate from this structure.
+      const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===".
 
-CRITICAL FORMATTING RULES:
-- Output ONLY the raw requested text for each section. 
-- NO conversational filler.
-- For math notation, use LaTeX format: inline math with $formula$ and block math with $$formula$$
-
-Section 1: Write a SHORT TITLE (4-8 words max) summarizing the specific topic.
+Section 1: SHORT TITLE (4-8 words max)
 ===SPLIT===
-Section 2: Write an EXECUTIVE SUMMARY (exactly 250 words) giving a high-level overview.
+Section 2: EXECUTIVE SUMMARY (exactly 250 words)
 ===SPLIT===
-Section 3: Write DETAILED NOTES in Markdown format.
-   - Use ## for main sections, ### for subsections.
-   - You MUST include Markdown tables to organize data where applicable.
-   - Use bullet points and **bold** text extensively.
-   - MATH NOTATION: For inline math use $formula$, for block use $$formula$$
+Section 3: DETAILED NOTES in Markdown format. Use tables and bold text. Inline math $formula$, block $$formula$$.
 ===SPLIT===
-Section 4: Create exactly ${flashcardCount} FLASHCARDS.
-Format strictly like this, replacing brackets with content:
-Each flashcard should ask a QUESTION on the front and provide the ANSWER on the back.
-
-QUESTION: [Question that tests understanding of a concept]
-ANSWER: [Detailed answer/explanation]
-
-QUESTION: [Next question]
-ANSWER: [Next answer]
+Section 4: Create exactly ${flashcardCount} FLASHCARDS. Format strictly:
+QUESTION: [Question text]
+ANSWER: [Answer text]
 ===SPLIT===
-Section 5: Create exactly ${quizCount} QUIZ QUESTIONS.
-Format strictly like this, replacing brackets with content:
+Section 5: Create exactly ${quizCount} QUIZ QUESTIONS. Format strictly:
 QUESTION: [Question text]
 A) [Option A]
 B) [Option B]
@@ -528,11 +471,10 @@ C) [Option C]
 D) [Option D]
 ANSWER: [A/B/C/D]
 
-Ensure you output EXACTLY 5 parts using "===SPLIT===" as the separator.`;
+Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
 
       const safeContext = finalContext.substring(0, 150000); 
 
-      // MAGIC: If pdfFiles are present, this goes natively to Google bypassing Vercel entirely!
       const mainResult = await callLLM(mainPrompt, safeContext, pdfFiles);
       
       let parts = mainResult.split('===SPLIT===').map((p: string) => p.trim());
@@ -545,17 +487,8 @@ Ensure you output EXACTLY 5 parts using "===SPLIT===" as the separator.`;
       parts[1] = summaryClean;
 
       const podPrompt = `Convert this content into a teaching monologue for an audio podcast. 
-
-IMPORTANT RULES:
-- Use short, clear sentences
-- Conversational and engaging tone
-- NO stage directions, emotions, or sound effects
-- NO asterisks, brackets, or special characters
-- NO indications of tone like (excited), (pause), etc.
-- Just plain text that can be read aloud naturally
-
-Content to convert:
-${parts[1] || safeContext.substring(0, 3000)}`;
+IMPORTANT RULES: Short sentences, conversational tone, NO stage directions like (excited), NO asterisks or brackets. Just plain text.
+Content: ${parts[1] || safeContext.substring(0, 3000)}`;
       
       const podResult = await callLLM(podPrompt, '');
       const cleanPodResult = podResult
@@ -666,11 +599,7 @@ ${parts[1] || safeContext.substring(0, 3000)}`;
 
     try {
       const context = currentStudySet.parts.join('\n');
-      const prompt = `You are Professor Hazel, a helpful AI tutor for HazelNote. 
-Use the provided Study Material to answer the user's question accurately. 
-If the user asks to rewrite, shorten, or expand the notes, generate the requested content formatted cleanly in Markdown. 
-Always base your answers strictly on the provided material unless asked a general conceptual question.
-
+      const prompt = `You are Professor Hazel, a helpful AI tutor. Answer based strictly on the material below:
 Study Material:
 ${context}`;
 
@@ -691,15 +620,13 @@ ${context}`;
 
   const translateNotes = async () => {
     if (!currentStudySet) return;
-    
     const langSelect = document.getElementById('translate-language') as HTMLSelectElement;
     const lang = langSelect?.value || 'Urdu';
-    
     setTranslateModalOpen(false);
     
     try {
       const content = currentStudySet.parts.join('\n===SPLIT===\n');
-      const prompt = `Translate this entire study set into ${lang}. Maintain ALL the '===SPLIT===' separators exactly as they are. Translate the text inside each section. Keep markdown formatting.`;
+      const prompt = `Translate this entire study set into ${lang}. Maintain ALL the '===SPLIT===' separators exactly as they are. Keep markdown formatting.`;
       const result = await callLLM(prompt, content);
       const newParts = result.split('===SPLIT===').map((p: string) => p.trim());
 
@@ -722,25 +649,11 @@ ${context}`;
     }
   };
 
-  const EDGE_TTS_VOICES = [
-    { name: 'en-US-AriaNeural', label: 'Aria (US Female)' },
-    { name: 'en-US-GuyNeural', label: 'Guy (US Male)' },
-    { name: 'en-GB-SoniaNeural', label: 'Sonia (UK Female)' },
-    { name: 'en-GB-RyanNeural', label: 'Ryan (UK Male)' },
-    { name: 'en-AU-NatashaNeural', label: 'Natasha (AU Female)' },
-  ];
-
-  const [selectedVoice, setSelectedVoice] = useState('en-US-AriaNeural');
-
   const togglePodcast = async () => {
     if (!currentStudySet?.podcast) return;
     
     if (isPlaying) {
       window.speechSynthesis.cancel();
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
       setIsPlaying(false);
       return;
     }
@@ -758,9 +671,10 @@ ${context}`;
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
       
-      const voices = window.speechSynthesis.getVoices();
-      const preferredVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural') || v.lang === 'en-US');
-      if (preferredVoice) utterance.voice = preferredVoice;
+      if (selectedVoiceURI) {
+        const selectedVoice = availableVoices.find(v => v.voiceURI === selectedVoiceURI);
+        if (selectedVoice) utterance.voice = selectedVoice;
+      }
 
       utterance.onend = () => speakLine(index + 1);
       utterance.onerror = () => setIsPlaying(false);
@@ -770,26 +684,19 @@ ${context}`;
     speakLine(0);
   };
 
-  useEffect(() => {
-    const loadVoices = () => window.speechSynthesis.getVoices();
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-  }, []);
-
+  // Fixed Robust Parsing Regex
   const renderFlashcards = (text: string) => {
     if (!text || text.includes('incomplete')) return <p className="text-gray-500">No flashcards generated.</p>;
 
-    const regex = /QUESTION:\s*([\s\S]*?)\s*ANSWER:\s*([\s\S]*?)(?=QUESTION:|$)/gi;
+    // Clean markdown bolding that Gemini might incorrectly wrap keywords with
+    const cleanText = text.replace(/\*\*/g, '');
+    const regex = /(?:QUESTION|Q):\s*([\s\S]*?)\s*(?:ANSWER|A):\s*([\s\S]*?)(?=(?:QUESTION|Q):|$)/gi;
+    
     const cards: { question: string; answer: string }[] = [];
     let match;
 
-    while ((match = regex.exec(text)) !== null) {
-      cards.push({ question: match[1].trim(), answer: match[2].trim() });
-    }
-
-    if (cards.length === 0) {
-      const oldRegex = /FRONT:\s*([\s\S]*?)\s*BACK:\s*([\s\S]*?)(?=FRONT:|$)/gi;
-      while ((match = oldRegex.exec(text)) !== null) {
+    while ((match = regex.exec(cleanText)) !== null) {
+      if (match[1].trim() && match[2].trim()) {
         cards.push({ question: match[1].trim(), answer: match[2].trim() });
       }
     }
@@ -804,6 +711,7 @@ ${context}`;
             </div>
           </div>
         ))}
+        {cards.length === 0 && <p className="text-gray-500 col-span-full">Format mismatch. Could not parse generated flashcards.</p>}
       </div>
     );
   };
@@ -811,11 +719,14 @@ ${context}`;
   const renderQuiz = (text: string) => {
     if (!text || text.includes('incomplete')) return <p className="text-gray-500">No quiz generated.</p>;
 
-    const regex = /QUESTION:\s*([\s\S]*?)\s*A\)\s*([\s\S]*?)\s*B\)\s*([\s\S]*?)\s*C\)\s*([\s\S]*?)\s*D\)\s*([\s\S]*?)\s*ANSWER:\s*([A-D])/gi;
+    // Clean markdown before parsing
+    const cleanText = text.replace(/\*\*/g, '');
+    const regex = /(?:QUESTION|Q):\s*([\s\S]*?)\s*A\)\s*([\s\S]*?)\s*B\)\s*([\s\S]*?)\s*C\)\s*([\s\S]*?)\s*D\)\s*([\s\S]*?)\s*(?:ANSWER|A):\s*([A-D])/gi;
+    
     const questions: { q: string; opts: string[]; answer: string }[] = [];
     let match;
 
-    while ((match = regex.exec(text)) !== null) {
+    while ((match = regex.exec(cleanText)) !== null) {
       questions.push({
         q: match[1].trim(),
         opts: [match[2].trim(), match[3].trim(), match[4].trim(), match[5].trim()],
@@ -856,20 +767,22 @@ ${context}`;
             </div>
           </div>
         ))}
+        {questions.length === 0 && <p className="text-gray-500 text-center">Format mismatch. Could not parse generated quiz.</p>}
       </div>
     );
   };
 
   const handleOpenChat = () => { setSidebarCollapsed(true); setChatOpen(true); };
   const handleCloseChat = () => { setChatOpen(false); setSidebarCollapsed(false); };
-  const handleFormat = (format: string) => document.execCommand(format, false);
+  
+  // Real Rich-Text Editor Commands
+  const handleFormat = (command: string, value?: string) => document.execCommand(command, false, value);
   const handleInsertMath = () => { const mathInput = prompt('Enter LaTeX math (e.g., E = mc^2):'); if (mathInput) document.execCommand('insertText', false, ` $${mathInput}$ `); };
   const handleInsertImage = () => { const imageUrl = prompt('Enter image URL:'); if (imageUrl) document.execCommand('insertImage', false, imageUrl); };
-  
   const handleInsertTable = () => {
     const rows = parseInt(prompt('Number of rows:', '3') || '3');
     const cols = parseInt(prompt('Number of columns:', '3') || '3');
-    let tableHtml = '<table class="border-collapse border border-gray-400 my-4"><tbody>';
+    let tableHtml = '<table class="border-collapse border border-gray-400 my-4 w-full"><tbody>';
     for (let i = 0; i < rows; i++) {
       tableHtml += '<tr>';
       for (let j = 0; j < cols; j++) tableHtml += '<td class="border border-gray-400 p-2">Cell</td>';
@@ -883,7 +796,7 @@ ${context}`;
     const selection = window.getSelection()?.toString();
     if (selection) {
       const comment = prompt('Add your comment:');
-      if (comment) document.execCommand('insertHTML', false, `<span class="bg-yellow-200 dark:bg-yellow-700" title="${comment}">${selection}</span>`);
+      if (comment) document.execCommand('insertHTML', false, `<span class="bg-yellow-200 text-black px-1 rounded cursor-help" title="${comment}">${selection}</span>`);
     }
   };
 
@@ -1160,7 +1073,7 @@ ${context}`;
                           </div>
                         </div>
                         {isEditing && (
-                          <NoteEditorToolbar onFormat={handleFormat} onInsertMath={handleInsertMath} onInsertImage={handleInsertImage} onInsertTable={handleInsertTable} onAddComment={handleAddComment} fontSize={fontSize} setFontSize={setFontSize} fontColor={fontColor} setFontColor={setFontColor} highlightColor={highlightColor} setHighlightColor={setHighlightColor} />
+                          <NoteEditorToolbar onFormat={handleFormat} onInsertMath={handleInsertMath} onInsertImage={handleInsertImage} onInsertTable={handleInsertTable} onAddComment={handleAddComment} />
                         )}
                       </div>
                     )}
@@ -1169,7 +1082,13 @@ ${context}`;
                       <div className="text-gray-200 text-lg leading-relaxed prose-p:my-0" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[1] || 'No summary available.') }} />
                     </div>
                     {isEditing && tier === 'pro' ? (
-                      <div className="prose prose-lg max-w-none text-gray-200 bg-gray-800/50 p-6 rounded-2xl border border-gray-700 min-h-[400px]" contentEditable suppressContentEditableWarning onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: editedNotes }} style={{ fontSize: `${fontSize}px`, color: fontColor }} />
+                      <div 
+                        className="prose prose-lg max-w-none bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 p-8 rounded-b-2xl border-x border-b border-gray-200 dark:border-gray-700 min-h-[500px] shadow-inner focus:outline-none" 
+                        contentEditable 
+                        suppressContentEditableWarning 
+                        onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)} 
+                        dangerouslySetInnerHTML={{ __html: editedNotes }} 
+                      />
                     ) : (
                       <div className="prose prose-lg max-w-none text-gray-200" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(currentStudySet.parts[2] || 'No notes available.') }} />
                     )}
@@ -1190,9 +1109,15 @@ ${context}`;
                       <p className="text-indigo-200 mb-6 max-w-md mx-auto text-sm">Listen to an AI-generated teaching monologue based on your notes.</p>
                       
                       <div className="mb-6">
-                        <label className="text-xs text-indigo-300 mb-2 block">Select Voice</label>
-                        <select value={selectedVoice} onChange={(e) => setSelectedVoice(e.target.value)} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm text-white">
-                          {EDGE_TTS_VOICES.map(voice => <option key={voice.name} value={voice.name} className="text-black">{voice.label}</option>)}
+                        <label className="text-xs text-indigo-300 mb-2 block">System Voice Selection</label>
+                        <select 
+                          value={selectedVoiceURI} 
+                          onChange={(e) => setSelectedVoiceURI(e.target.value)} 
+                          className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm text-white w-full max-w-xs focus:outline-none"
+                        >
+                          {availableVoices.length > 0 ? availableVoices.map(voice => (
+                            <option key={voice.voiceURI} value={voice.voiceURI} className="text-black">{voice.name} ({voice.lang})</option>
+                          )) : <option className="text-black">Loading local voices...</option>}
                         </select>
                       </div>
 
