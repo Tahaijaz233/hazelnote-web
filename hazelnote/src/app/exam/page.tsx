@@ -123,17 +123,23 @@ Generate exactly ${questionCount} questions.`;
       const data = await response.json();
       
       if (data.result) {
-        // Parse questions
-        const regex = /QUESTION:\s*([\s\S]*?)\s*A\)\s*([\s\S]*?)\s*B\)\s*([\s\S]*?)\s*C\)\s*([\s\S]*?)\s*D\)\s*([\s\S]*?)\s*ANSWER:\s*([A-D])/gi;
+        // Robust markdown-stripped parsing
+        const cleanText = data.result.replace(/\*\*/g, '');
+        const regex = /(?:QUESTION|Q):\s*([\s\S]*?)\s*A\)\s*([\s\S]*?)\s*B\)\s*([\s\S]*?)\s*C\)\s*([\s\S]*?)\s*D\)\s*([\s\S]*?)\s*(?:ANSWER|A):\s*([A-D])/gi;
         const questions: any[] = [];
         let match;
         
-        while ((match = regex.exec(data.result)) !== null) {
+        while ((match = regex.exec(cleanText)) !== null) {
           questions.push({
             question: match[1].trim(),
             options: [match[2].trim(), match[3].trim(), match[4].trim(), match[5].trim()],
             answer: match[6].trim().toUpperCase(),
           });
+        }
+
+        if (questions.length === 0) {
+          alert("AI formatted the questions incorrectly. Please try again.");
+          return;
         }
 
         setExamQuestions(questions);
