@@ -8,7 +8,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Server Configuration Error: Gemini API keys missing.' }, { status: 500 });
   }
 
-  return NextResponse.json({ apiKey: API_KEYS[0] });
+  // Expose ALL keys to the frontend for the multi-key fallback loop during massive file uploads & TTS
+  return NextResponse.json({ apiKey: API_KEYS[0], apiKeys: API_KEYS });
 }
 
 export async function POST(request: NextRequest) {
@@ -42,22 +43,49 @@ export async function POST(request: NextRequest) {
       generationConfig: { maxOutputTokens: 8192, temperature: 0.7 },
     };
 
-    const apiKey = API_KEYS[0];
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    let lastErrorMsg = '';
 
-    const data = await response.json();
+    // MULTI-KEY FALLBACK LOOP
+    for (const apiKey of API_KEYS) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-    if (!response.ok || data.error) {
-      return NextResponse.json({ error: data.error?.message || 'Gemini API Error' }, { status: response.status });
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          const errMsg = data.error?.message || 'Gemini API Error';
+          lastErrorMsg = errMsg;
+          
+          // Check if error is due to rate limiting or quota
+          if (response.status === 429 || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('exceeded')) {
+            console.warn(`Gemini API Key hit quota limit. Trying next key...`);
+            continue; // Skip to the next key in the array
+          }
+          
+          // For other immediate failures (like bad requests), throw right away
+          return NextResponse.json({ error: errMsg }, { status: response.status });
+        }
+
+        // Success! Return the result.
+        return NextResponse.json({ result: data.candidates?.[0]?.content?.parts?.[0]?.text });
+
+      } catch (err: any) {
+        lastErrorMsg = err.message;
+        console.warn(`Gemini Request Failed: ${lastErrorMsg}. Trying next key...`);
+        continue;
+      }
     }
 
-    return NextResponse.json({ result: data.candidates?.[0]?.content?.parts?.[0]?.text });
+    // If the loop finishes without returning, ALL keys have failed
+    return NextResponse.json(
+      { error: `All Gemini API keys exhausted. Last error: ${lastErrorMsg}` }, 
+      { status: 429 }
+    );
 
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
