@@ -22,7 +22,6 @@ export default function Pricing() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0F172A] to-[#1E293B]">
-      {/* Navigation */}
       <nav className="fixed top-4 left-1/2 transform -translate-x-1/2 w-[95%] max-w-7xl z-50 bg-[#0F172A]/70 backdrop-blur-xl border border-gray-800 rounded-full shadow-2xl">
         <div className="px-6 py-3">
           <div className="flex items-center justify-between">
@@ -57,7 +56,6 @@ export default function Pricing() {
           <h1 className="text-5xl md:text-6xl font-extrabold text-white mb-6 leading-tight mt-8">Choose Your <span className="gradient-text">Study Plan</span></h1>
           <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">Start for free or unlock unlimited features with the Pro plan.</p>
           
-          {/* Billing Toggle */}
           <div className="flex justify-center mb-10">
             <div className="bg-gray-800/50 backdrop-blur-lg p-1.5 rounded-full inline-flex border border-gray-700">
               <button
@@ -80,7 +78,6 @@ export default function Pricing() {
       <section className="pb-20 px-6">
         <div className="max-w-4xl mx-auto">
           <div className="grid md:grid-cols-2 gap-8">
-            {/* FREE */}
             <div className="bg-gray-800/50 backdrop-blur-lg border-2 border-gray-700 rounded-3xl p-8 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(16,185,129,0.3)]">
               <h3 className="text-2xl font-extrabold text-white mb-2">Free</h3>
               <div className="mb-8 mt-4"><span className="text-5xl font-extrabold text-white">$0</span><span className="text-gray-400">/mo</span></div>
@@ -93,7 +90,6 @@ export default function Pricing() {
               </div>
             </div>
             
-            {/* PRO */}
             <div className="bg-gradient-to-br from-green-900/40 to-blue-900/40 backdrop-blur-lg border-2 border-green-500 rounded-3xl p-8 relative transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(16,185,129,0.3)]">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2"><span className="bg-gradient-to-r from-green-500 to-blue-500 text-white px-4 py-1 rounded-full text-sm font-bold">UNLIMITED ACCESS</span></div>
               <h3 className="text-2xl font-extrabold text-white mb-2">Pro</h3>
@@ -107,7 +103,7 @@ export default function Pricing() {
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">PDF upload (up to 50MB)</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Unlimited AI Tutor chats</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">AI Podcasts & Translation</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Up to 30 Exam Questions</span></div>
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Generate extra flashcards & quizzes</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Advanced Note Editing</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Sync Across Devices</span></div>
               </div>
