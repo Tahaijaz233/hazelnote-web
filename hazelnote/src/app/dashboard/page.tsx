@@ -305,7 +305,7 @@ export default function Dashboard() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    const maxMB = tier === 'free' ? 10 : 500;
+    const maxMB = tier === 'free' ? 5 : 50;
     const newFiles: PDFFile[] = [];
 
     for (const file of files) {
@@ -337,8 +337,19 @@ export default function Dashboard() {
     };
 
     if (files && files.length > 0 && files[0].data) {
-      payload.pdfBase64 = files[0].data;
-      payload.mimeType = files[0].mimeType;
+      const fileSizeMB = (files[0].data.length * 0.75) / (1024 * 1024); // Approximate base64 size
+
+      // Use File API for files larger than 3MB to avoid Vercel's 4.5MB limit
+      if (fileSizeMB > 3) {
+        payload.pdfBase64 = files[0].data;
+        payload.mimeType = files[0].mimeType;
+        payload.useFileApi = true;
+      } else {
+        // Use inline data for smaller files
+        payload.pdfBase64 = files[0].data;
+        payload.mimeType = files[0].mimeType;
+        payload.useFileApi = false;
+      }
     }
 
     const res = await fetch('/api/gemini/', {
@@ -347,7 +358,16 @@ export default function Dashboard() {
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
+    // Handle non-JSON responses
+    const contentType = res.headers.get('content-type');
+    let data;
+
+    if (contentType && contentType.includes('application/json')) {
+      data = await res.json();
+    } else {
+      const text = await res.text();
+      throw new Error(`Server error: ${text.substring(0, 200)}`);
+    }
 
     if (data.error) {
       if (data.error.toLowerCase().includes('quota')) {
@@ -1083,7 +1103,7 @@ ${context}`;
               <div className="glass-card p-8 md:p-12 text-center border-2 border-dashed border-gray-600 bg-gray-800/50 backdrop-blur-lg">
                 <FileText className="w-16 h-16 text-gray-500 mx-auto mb-4" />
                 <h3 className="text-xl font-bold mb-2 text-white">Upload Multiple PDFs</h3>
-                <p className="text-gray-400 mb-8 max-w-sm mx-auto">Upload documents to be instantly processed via Gemini AI. {tier === 'free' ? 'Max 10MB per file.' : 'Max 500MB per file.'}</p>
+                <p className="text-gray-400 mb-8 max-w-sm mx-auto">Upload documents to be instantly processed via Gemini AI. {tier === 'free' ? 'Max 5MB per file.' : 'Max 50MB per file.'}</p>
                 <input type="file" id="pdf-upload" multiple accept=".pdf" className="hidden" onChange={handlePDFUpload} />
                 <label htmlFor="pdf-upload" className="btn-primary px-10 py-4 cursor-pointer inline-block shadow-lg text-lg">Browse Files</label>
                 <div className="mt-8 flex flex-wrap gap-2 justify-center">
