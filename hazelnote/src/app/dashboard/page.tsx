@@ -42,8 +42,11 @@ import {
   MessageCircleQuestion,
   Highlighter,
   Table as TableIcon,
-  FolderOpen,
-  StopCircle
+  StopCircle,
+  ChevronDown,
+  Edit2,
+  FolderPlus,
+  Network
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
@@ -58,15 +61,23 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
   const [savedRange, setSavedRange] = useState<Range | null>(null);
+  
   const colors = ['#000000', '#FFFFFF', '#EF4444', '#22C55E', '#3B82F6', '#F59E0B', '#A855F7', '#EC4899'];
   const highlights = ['transparent', '#FEF08A', '#BBF7D0', '#BFDBFE', '#FBCFE8', '#FED7AA', '#E9D5FF'];
+  const fonts = ['Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana', 'Inter'];
   
   const saveSelection = () => {
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) setSavedRange(sel.getRangeAt(0));
+    if (sel && sel.rangeCount > 0) {
+      setSavedRange(sel.getRangeAt(0));
+    }
   };
 
   const restoreSelection = () => {
+    // Explicitly focus the editor div before restoring selection if needed
+    const editor = document.getElementById('active-pro-editor');
+    if (editor) editor.focus();
+    
     if (savedRange) {
       const sel = window.getSelection();
       sel?.removeAllRanges();
@@ -126,56 +137,78 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   };
 
   return (
-    <div className="sticky top-4 md:top-[88px] z-40 bg-gray-900/95 backdrop-blur-md border border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-2xl rounded-2xl mb-4 transition-all">
+    <div className="sticky top-4 md:top-4 z-40 bg-gray-900/95 backdrop-blur-md border border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-2xl rounded-2xl mb-4 transition-all"
+         onMouseDown={(e) => {
+             // Prevent losing focus on editor when clicking toolbar background
+             if(e.target === e.currentTarget) e.preventDefault()
+         }}>
+      
+      {/* Font Family */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button onClick={() => togglePopup('font')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Font Size"><Type className="w-4 h-4" /></button>
+        <button onClick={(e) => { e.preventDefault(); togglePopup('fontFamily'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition text-sm font-bold flex items-center gap-1" title="Font Family">
+          Font <ChevronDown className="w-3 h-3" />
+        </button>
+        {activePopup === 'fontFamily' && (
+          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[140px]">
+            {fonts.map(font => (
+              <button key={font} className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" style={{ fontFamily: font }} onClick={(e) => { e.preventDefault(); executeFormat('fontName', font); }}>{font}</button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Font Size */}
+      <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
+        <button onClick={(e) => { e.preventDefault(); togglePopup('font'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Font Size"><Type className="w-4 h-4" /></button>
         {activePopup === 'font' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[120px]">
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={() => executeFormat('fontSize', '1')}>Small</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={() => executeFormat('fontSize', '3')}>Normal</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={() => executeFormat('fontSize', '5')}>Large</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={() => executeFormat('fontSize', '7')}>Huge</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={(e) => { e.preventDefault(); executeFormat('fontSize', '1'); }}>Small</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={(e) => { e.preventDefault(); executeFormat('fontSize', '3'); }}>Normal</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={(e) => { e.preventDefault(); executeFormat('fontSize', '5'); }}>Large</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onClick={(e) => { e.preventDefault(); executeFormat('fontSize', '7'); }}>Huge</button>
           </div>
         )}
       </div>
       
+      {/* Formatting & Colors */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button onClick={() => executeFormat('bold')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Bold"><Bold className="w-4 h-4" /></button>
-        <button onClick={() => executeFormat('italic')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Italic"><Italic className="w-4 h-4" /></button>
-        <button onClick={() => executeFormat('underline')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Underline"><Underline className="w-4 h-4" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('bold'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Bold"><Bold className="w-4 h-4" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('italic'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Italic"><Italic className="w-4 h-4" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('underline'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Underline"><Underline className="w-4 h-4" /></button>
         
-        <button onClick={() => togglePopup('color')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Text Color"><Palette className="w-4 h-4" /></button>
+        <button onClick={(e) => { e.preventDefault(); togglePopup('color'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Text Color"><Palette className="w-4 h-4" /></button>
         {activePopup === 'color' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-3 shadow-2xl flex flex-col gap-3 z-50">
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Text Color</p>
             <div className="grid grid-cols-4 gap-2">
-              {colors.map(c => <button key={c} onClick={() => executeFormat('foreColor', c)} className="w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition" style={{ backgroundColor: c }} />)}
+              {colors.map(c => <button key={c} onMouseDown={(e) => { e.preventDefault(); executeFormat('foreColor', c); }} className="w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition" style={{ backgroundColor: c }} />)}
             </div>
           </div>
         )}
 
-        <button onClick={() => togglePopup('highlight')} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Highlight Color"><Highlighter className="w-4 h-4" /></button>
+        <button onClick={(e) => { e.preventDefault(); togglePopup('highlight'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Highlight Color"><Highlighter className="w-4 h-4" /></button>
         {activePopup === 'highlight' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-3 shadow-2xl flex flex-col gap-3 z-50">
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Highlight Color</p>
             <div className="grid grid-cols-4 gap-2">
-              {highlights.map(c => <button key={c} onClick={() => executeFormat('backColor', c)} className={`w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition`} style={{ backgroundColor: c === 'transparent' ? '#374151' : c }} title={c === 'transparent' ? 'Clear Highlight' : c} />)}
+              {highlights.map(c => <button key={c} onMouseDown={(e) => { e.preventDefault(); executeFormat('backColor', c); }} className={`w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition`} style={{ backgroundColor: c === 'transparent' ? '#374151' : c }} title={c === 'transparent' ? 'Clear Highlight' : c} />)}
             </div>
           </div>
         )}
       </div>
 
+      {/* Advanced Inserts */}
       <div className="flex items-center gap-1 relative">
-        <button onClick={() => togglePopup('math')} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><FunctionSquare className="w-4 h-4 text-blue-400" /> Math</button>
+        <button onClick={(e) => { e.preventDefault(); togglePopup('math'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><FunctionSquare className="w-4 h-4 text-blue-400" /> Math</button>
         {activePopup === 'math' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[280px]">
             <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Enter LaTeX Equation</label>
-            <input autoFocus value={mathInput} onChange={e=>setMathInput(e.target.value)} onKeyDown={(e)=>e.key==='Enter'&&handleMathSubmit()} className="bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" placeholder="e.g. E = mc^2" />
-            <button onClick={handleMathSubmit} className="bg-blue-500 text-white text-sm py-2 rounded-lg font-bold">Insert Equation</button>
+            <input autoFocus value={mathInput} onChange={e=>setMathInput(e.target.value)} onKeyDown={(e)=>{ if(e.key==='Enter') { e.preventDefault(); handleMathSubmit(); } }} className="bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" placeholder="e.g. E = mc^2" />
+            <button onClick={(e) => { e.preventDefault(); handleMathSubmit(); }} className="bg-blue-500 text-white text-sm py-2 rounded-lg font-bold">Insert Equation</button>
           </div>
         )}
 
-        <button onClick={() => togglePopup('table')} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><TableIcon className="w-4 h-4 text-indigo-400" /> Table</button>
+        <button onClick={(e) => { e.preventDefault(); togglePopup('table'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><TableIcon className="w-4 h-4 text-indigo-400" /> Table</button>
         {activePopup === 'table' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[220px]">
              <div className="flex justify-between gap-4">
@@ -188,11 +221,11 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
                   <input type="number" min="1" max="10" value={tableCols} onChange={e=>setTableCols(Number(e.target.value))} className="w-full bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" />
                </div>
              </div>
-             <button onClick={handleInsertTable} className="bg-indigo-500 text-white text-sm py-2 rounded-lg font-bold mt-2">Insert Table</button>
+             <button onClick={(e) => { e.preventDefault(); handleInsertTable(); }} className="bg-indigo-500 text-white text-sm py-2 rounded-lg font-bold mt-2">Insert Table</button>
           </div>
         )}
 
-        <button onClick={() => togglePopup('image')} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><ImageIcon className="w-4 h-4 text-green-400" /> Image</button>
+        <button onClick={(e) => { e.preventDefault(); togglePopup('image'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><ImageIcon className="w-4 h-4 text-green-400" /> Image</button>
         {activePopup === 'image' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[220px]">
             <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Upload Local Image</label>
@@ -222,8 +255,20 @@ export default function Dashboard() {
   const [currentStudySet, setCurrentStudySet] = useState<StudySet | null>(null);
   const [studyHistory, setStudyHistory] = useState<StudySet[]>([]);
   const [stats, setStats] = useState<UserStats>({ streak: 0, notes: 0, lastDate: null, monthlySets: {} });
+  
+  // Folders State
   const [folders, setFolders] = useState<Folder[]>([]);
   const [activeFilterFolder, setActiveFilterFolder] = useState<string | null>(null);
+  const [folderDropdownOpen, setFolderDropdownOpen] = useState(false);
+  const [folderModal, setFolderModal] = useState<{isOpen: boolean, type: 'create'|'edit', folderId?: string, name: string, emoji: string}>({ isOpen: false, type: 'create', name: '', emoji: '📁' });
+
+  // Add Context Modal (Pro)
+  const [addContextModalOpen, setAddContextModalOpen] = useState(false);
+  const [contextInputMode, setContextInputMode] = useState<'pdf' | 'voice' | 'link'>('pdf');
+  const [contextPdfFiles, setContextPdfFiles] = useState<File[]>([]);
+  const [contextVoiceText, setContextVoiceText] = useState('');
+  const [isAddingContextLoading, setIsAddingContextLoading] = useState(false);
+
   const [tier, setTier] = useState<'free' | 'pro'>('free');
   
   const [chatOpen, setChatOpen] = useState(false);
@@ -299,6 +344,7 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
+  // --- Folder Management ---
   const saveStatsAndFolders = async (newStats: UserStats, newFolders: Folder[]) => {
     setStats(newStats);
     setFolders(newFolders);
@@ -310,6 +356,43 @@ export default function Dashboard() {
       } catch(e) {}
     }
   };
+
+  const handleSaveFolder = () => {
+    if (!folderModal.name.trim()) return alert("Folder name cannot be empty.");
+    let newFolders = [...folders];
+    if (folderModal.type === 'create') {
+        newFolders.push({ id: Date.now().toString(), name: folderModal.name, emoji: folderModal.emoji || '📁' });
+    } else if (folderModal.type === 'edit' && folderModal.folderId) {
+        newFolders = newFolders.map(f => f.id === folderModal.folderId ? { ...f, name: folderModal.name, emoji: folderModal.emoji } : f);
+    }
+    saveStatsAndFolders(stats, newFolders);
+    setFolderModal({ isOpen: false, type: 'create', name: '', emoji: '📁' });
+  };
+
+  const deleteFolder = (id: string) => {
+    if(!confirm("Delete this folder? Your study sets inside will remain safe but uncategorized.")) return;
+    const newFolders = folders.filter(f => f.id !== id);
+    saveStatsAndFolders(stats, newFolders);
+    if(activeFilterFolder === id) setActiveFilterFolder(null);
+  };
+
+  const openFolderModal = (type: 'create' | 'edit', folder?: Folder) => {
+    setFolderDropdownOpen(false);
+    if (type === 'create') {
+        setFolderModal({ isOpen: true, type, name: '', emoji: '📁' });
+    } else if (type === 'edit' && folder) {
+        setFolderModal({ isOpen: true, type, folderId: folder.id, name: folder.name, emoji: folder.emoji });
+    }
+  };
+
+  const assignFolderToSet = (setId: number, folderId: string) => {
+    const newHistory = studyHistory.map(s => s.id === setId ? { ...s, folderId: folderId || undefined } : s);
+    setStudyHistory(newHistory);
+    saveToStorage('hz_study_history', newHistory);
+    const updatedSet = newHistory.find(s => s.id === setId);
+    if(updatedSet && tier === 'pro') syncToFirebase(updatedSet);
+  };
+  // -------------------------
 
   const syncFromFirebase = async (userId: string) => {
     try {
@@ -366,23 +449,6 @@ export default function Dashboard() {
         await deleteDoc(doc(db, 'profiles', user.uid, 'study_sets', setId.toString()));
       } catch(err) { console.error('Error deleting from cloud', err); }
     }
-  };
-
-  const createNewFolder = () => {
-    const name = prompt("Enter folder name:");
-    if (!name) return;
-    const emoji = prompt("Enter an emoji for this folder (optional):") || "📁";
-    const newFolder: Folder = { id: Date.now().toString(), name, emoji };
-    const newFolders = [...folders, newFolder];
-    saveStatsAndFolders(stats, newFolders);
-  };
-
-  const assignFolderToSet = (setId: number, folderId: string) => {
-    const newHistory = studyHistory.map(s => s.id === setId ? { ...s, folderId: folderId || undefined } : s);
-    setStudyHistory(newHistory);
-    saveToStorage('hz_study_history', newHistory);
-    const updatedSet = newHistory.find(s => s.id === setId);
-    if(updatedSet && tier === 'pro') syncToFirebase(updatedSet);
   };
 
   const callLLM = async (systemPrompt: string, userText: string, files?: File[]) => {
@@ -582,6 +648,77 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     }
   };
 
+  // --- Add Context (Pro) ---
+  const handleAddContext = async () => {
+     if (tier !== 'pro') return setGoProModalOpen(true);
+     if (!currentStudySet) return;
+
+     let finalContext = '';
+     if (contextVoiceText) finalContext += '\n' + contextVoiceText;
+
+     if (contextInputMode === 'link') {
+        const urlInput = document.getElementById('context-url-input') as HTMLInputElement;
+        if (!urlInput?.value) return alert('Please paste a YouTube URL to begin.');
+        setIsAddingContextLoading(true);
+        try {
+           const ytRes = await fetch('/api/youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: urlInput.value }) });
+           const ytData = await ytRes.json();
+           if (ytData.error) throw new Error(ytData.error);
+           finalContext += '\n' + ytData.text;
+        } catch(e: any) {
+           setIsAddingContextLoading(false);
+           return alert('Error fetching YouTube: ' + e.message);
+        }
+     } else if (contextInputMode === 'pdf') {
+        if (contextPdfFiles.length === 0) return alert('Please upload a PDF to begin.');
+     } else if (contextInputMode === 'voice') {
+        if (!contextVoiceText.trim()) return alert('Please dictate or type notes to begin.');
+     }
+
+     setIsAddingContextLoading(true);
+
+     try {
+         const prompt = `You are an expert tutor. I am providing existing study notes and new source material.
+         Integrate the relevant information from the new source material into the existing notes seamlessly, adding new sections or expanding existing ones where appropriate.
+         Return ONLY the updated comprehensive notes in Markdown format (use tables, bold text, inline math $formula$, block $$formula$$).
+         Do not include any other conversational text or separators before or after the notes.
+
+         EXISTING NOTES:
+         ${currentStudySet.parts[2]}
+
+         NEW SOURCE MATERIAL:
+         ${finalContext}
+         `;
+
+         const result = await callLLM(prompt, "", contextInputMode === 'pdf' ? contextPdfFiles : undefined);
+         
+         // Clean any markdown backticks if AI added them
+         const cleanNotes = result.replace(/^```[a-z]*\n/im, '').replace(/\n```$/m, '').trim();
+
+         const newParts = [...currentStudySet.parts];
+         newParts[2] = cleanNotes;
+         
+         const updatedSet = { ...currentStudySet, parts: newParts };
+         setCurrentStudySet(updatedSet);
+         
+         const newHistory = studyHistory.map(s => s.id === updatedSet.id ? updatedSet : s);
+         setStudyHistory(newHistory);
+         saveToStorage('hz_study_history', newHistory);
+         if (tier === 'pro') syncToFirebase(updatedSet);
+
+         // Reset Context State
+         setContextPdfFiles([]);
+         setContextVoiceText('');
+         setAddContextModalOpen(false);
+         setIsAddingContextLoading(false);
+         alert("Context seamlessly integrated into your notes!");
+     } catch (e: any) {
+         setIsAddingContextLoading(false);
+         alert("Error adding context: " + e.message);
+     }
+  };
+  // -------------------------
+
   const loadStudySet = (studySet: StudySet) => {
     setCurrentStudySet(studySet);
     setIsEditing(false);
@@ -705,15 +842,15 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
           const data = await res.json();
           if (!res.ok || data.error) throw new Error(data.error?.message || "Failed to generate audio");
           successData = data;
-          break; // Audio generated successfully!
+          break; 
         } catch(e: any) {
           lastErrorMsg = e.message;
           const errorString = lastErrorMsg.toLowerCase();
           if (errorString.includes('quota') || errorString.includes('exceeded') || errorString.includes('429')) {
              console.warn("TTS Quota exceeded. Retrying with next backup key...");
-             continue; // Try next key
+             continue; 
           } else {
-             throw e; // Non-quota error
+             throw e; 
           }
         }
       }
@@ -734,7 +871,6 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     setIsAudioLoading(false);
   };
 
-  // --- Audio Voice Q&A Implementation ---
   const toggleAskRecording = async () => {
     if (isAskRecording) {
         askMediaRecorder.current?.stop();
@@ -776,7 +912,6 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         const textResponse = data.result;
         setAskResponse(`<b>Professor Hazel:</b> ${textResponse}`);
         
-        // Generate TTS for the response using Backup Keys Loop
         const keyRes = await fetch('/api/gemini');
         const keyData = await keyRes.json();
         const apiKeys = keyData.apiKeys || [keyData.apiKey];
@@ -837,7 +972,6 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     setAskResponse('');
     stopProfSpeaking();
   };
-  // --------------------------------------
 
   const sendChatMessage = async () => {
     if (!chatInput.trim() || !currentStudySet) return;
@@ -1071,26 +1205,54 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
               <button onClick={() => setCurrentView('create')} className="btn-primary px-10 py-4 text-lg shadow-xl">Create New Study Set</button>
             </div>
 
-            <div className="mb-4">
-              <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="relative inline-block text-left z-20">
                 <button 
-                   onClick={() => setActiveFilterFolder(null)} 
-                   className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap transition-colors ${activeFilterFolder === null ? 'bg-green-500 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-400'}`}
+                   onClick={() => setFolderDropdownOpen(!folderDropdownOpen)} 
+                   className="px-5 py-2.5 rounded-xl font-bold bg-gray-800 hover:bg-gray-700 text-white flex items-center gap-2 border border-gray-700 shadow-md transition-all"
                 >
-                   All Sets
+                  {activeFilterFolder 
+                    ? <>{folders.find(f => f.id === activeFilterFolder)?.emoji} {folders.find(f => f.id === activeFilterFolder)?.name}</> 
+                    : <>📁 All Sets</>
+                  }
+                  <ChevronDown className="w-4 h-4 ml-2 text-gray-400" />
                 </button>
-                {folders.map(f => (
-                   <button 
-                     key={f.id} 
-                     onClick={() => setActiveFilterFolder(f.id)} 
-                     className={`px-4 py-2 rounded-full font-bold text-sm whitespace-nowrap flex items-center gap-2 transition-colors ${activeFilterFolder === f.id ? 'bg-green-500 text-white' : 'bg-gray-800 hover:bg-gray-700 text-gray-400'}`}
-                   >
-                     <span>{f.emoji}</span> {f.name}
-                   </button>
-                ))}
-                <button onClick={createNewFolder} className="px-4 py-2 rounded-full font-bold text-sm bg-gray-800/50 hover:bg-gray-700 text-gray-400 flex items-center gap-1 border border-dashed border-gray-600 whitespace-nowrap">
-                   <PlusCircle className="w-4 h-4"/> New Folder
-                </button>
+
+                {folderDropdownOpen && (
+                   <div className="absolute left-0 mt-2 w-64 rounded-xl shadow-2xl bg-gray-800 ring-1 ring-black ring-opacity-5 z-50 border border-gray-700 overflow-hidden">
+                     <div className="max-h-[300px] overflow-y-auto py-1">
+                       <button 
+                         className="w-full text-left px-4 py-3 text-sm font-bold text-white hover:bg-gray-700 transition" 
+                         onClick={() => { setActiveFilterFolder(null); setFolderDropdownOpen(false); }}
+                       >
+                         📁 All Sets
+                       </button>
+                       {folders.map(f => (
+                          <div key={f.id} className="flex justify-between items-center px-4 py-2 hover:bg-gray-700 group transition">
+                             <button 
+                               className="flex-1 text-left text-sm font-bold text-gray-300 group-hover:text-white transition" 
+                               onClick={() => { setActiveFilterFolder(f.id); setFolderDropdownOpen(false); }}
+                             >
+                               {f.emoji} {f.name}
+                             </button>
+                             <button 
+                                onClick={(e) => { e.stopPropagation(); openFolderModal('edit', f); }} 
+                                className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-gray-600 rounded-md transition"
+                             >
+                               <Edit2 className="w-3.5 h-3.5"/>
+                             </button>
+                          </div>
+                       ))}
+                       <div className="border-t border-gray-700 my-1"></div>
+                       <button 
+                         className="w-full px-4 py-3 text-sm font-bold text-green-400 hover:bg-gray-700 flex items-center gap-2 transition" 
+                         onClick={() => openFolderModal('create')}
+                       >
+                         <FolderPlus className="w-4 h-4" /> Create New Folder
+                       </button>
+                     </div>
+                   </div>
+                )}
               </div>
             </div>
 
@@ -1196,13 +1358,13 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         )}
 
         {currentView === 'study' && currentStudySet && (
-          <div className="p-4 md:p-8 max-w-6xl mx-auto pb-32 pt-6 md:pt-10">
+          <div className="p-4 md:p-8 max-w-6xl mx-auto pb-32 pt-6 md:pt-10 relative">
             <div className="mb-6 flex justify-between items-center">
               <button onClick={() => setCurrentView('dashboard')} className="text-gray-400 hover:text-white transition flex items-center gap-2 text-sm font-medium"><ArrowLeft className="w-4 h-4" /> Back</button>
             </div>
             
-            <div className="glass-card overflow-hidden bg-gray-800/50 backdrop-blur-lg border-gray-700 relative">
-              <div className="border-b border-gray-700 bg-gray-800/50 p-6 md:px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="glass-card bg-gray-800/50 backdrop-blur-lg border-gray-700 relative">
+              <div className="border-b border-gray-700 bg-gray-800/50 p-6 md:px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-t-2xl">
                 <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">{currentStudySet.title}</h2>
                 <div className="flex flex-wrap gap-2 w-full md:w-auto">
                   <button onClick={() => window.print()} className="text-sm bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition border border-gray-600"><Printer className="w-4 h-4" /> Export PDF</button>
@@ -1221,7 +1383,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                 </div>
               </div>
 
-              <div className="p-6 md:p-8 min-h-[600px] bg-gradient-to-br from-[#0F172A] to-[#1E293B] study-content-area relative z-0">
+              <div className="p-6 md:p-8 min-h-[600px] bg-gradient-to-br from-[#0F172A] to-[#1E293B] study-content-area rounded-b-2xl">
                 {currentTab === 'notes' && (
                   <div>
                     {tier === 'pro' && (
@@ -1229,15 +1391,21 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-bold text-green-400 uppercase tracking-wider flex items-center gap-1"><Sparkles className="w-3 h-3" /> Pro Editing Enabled</span>
                           <div className="flex gap-2">
+                            <button onClick={() => setAddContextModalOpen(true)} className="text-xs bg-indigo-900/40 border border-indigo-700 text-indigo-300 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 hover:bg-indigo-800/60 transition shadow-sm">
+                              <Network className="w-3 h-3"/> Add Context (Pro)
+                            </button>
                             {isEditing ? (
-                              <><button onClick={async () => {
-                                const up = [...currentStudySet.parts]; up[1] = editedSummary; up[2] = editedNotes;
-                                const set = { ...currentStudySet, parts: up };
-                                setCurrentStudySet(set); setStudyHistory(studyHistory.map(s => s.id === set.id ? set : s));
-                                if (tier === 'pro') await syncToFirebase(set); setIsEditing(false);
-                              }} className="text-xs bg-green-500 text-white px-3 py-1 rounded-lg font-bold"><Save className="w-3 h-3 inline mr-1" />Save</button><button onClick={() => setIsEditing(false)} className="text-xs bg-gray-700 text-gray-300 px-3 py-1 rounded-lg font-bold">Cancel</button></>
+                              <>
+                                <button onClick={async () => {
+                                  const up = [...currentStudySet.parts]; up[1] = editedSummary; up[2] = editedNotes;
+                                  const set = { ...currentStudySet, parts: up };
+                                  setCurrentStudySet(set); setStudyHistory(studyHistory.map(s => s.id === set.id ? set : s));
+                                  if (tier === 'pro') await syncToFirebase(set); setIsEditing(false);
+                                }} className="text-xs bg-green-500 text-white px-3 py-1.5 rounded-lg font-bold shadow-sm"><Save className="w-3 h-3 inline mr-1" />Save</button>
+                                <button onClick={() => setIsEditing(false)} className="text-xs bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg font-bold">Cancel</button>
+                              </>
                             ) : (
-                              <button onClick={() => { setEditedSummary(renderMarkdownWithMath(currentStudySet.parts[1])); setEditedNotes(renderMarkdownWithMath(currentStudySet.parts[2])); setIsEditing(true); }} className="text-xs bg-blue-900/30 text-blue-400 px-3 py-1 rounded-lg font-bold flex items-center gap-1 transition"><Type className="w-3 h-3" /> Edit Notes</button>
+                              <button onClick={() => { setEditedSummary(renderMarkdownWithMath(currentStudySet.parts[1])); setEditedNotes(renderMarkdownWithMath(currentStudySet.parts[2])); setIsEditing(true); }} className="text-xs bg-blue-900/40 border border-blue-800 text-blue-400 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition shadow-sm"><Type className="w-3 h-3" /> Edit Notes</button>
                             )}
                           </div>
                         </div>
@@ -1253,7 +1421,10 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                     {isEditing && tier === 'pro' ? (
                       <div className="space-y-6">
                         <div className="bg-green-900/10 p-6 md:p-8 rounded-[24px] border-2 border-dashed border-green-500/40 relative"><div className="absolute top-0 right-0 bg-green-500/20 text-green-400 text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-[24px] uppercase tracking-wider">Editing Summary</div><div className="prose prose-lg max-w-none text-gray-200 focus:outline-none min-h-[100px] note-editor-content" contentEditable suppressContentEditableWarning onBlur={(e) => setEditedSummary(e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: editedSummary }} /></div>
-                        <div className="bg-blue-900/10 p-6 md:p-8 rounded-[24px] border-2 border-dashed border-blue-500/40 relative"><div className="absolute top-0 right-0 bg-blue-500/20 text-blue-400 text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-[24px] uppercase tracking-wider">Editing Notes</div><div className="prose prose-lg max-w-none text-gray-200 focus:outline-none min-h-[400px] note-editor-content" contentEditable suppressContentEditableWarning onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: editedNotes }} /></div>
+                        <div className="bg-blue-900/10 p-6 md:p-8 rounded-[24px] border-2 border-dashed border-blue-500/40 relative">
+                          <div className="absolute top-0 right-0 bg-blue-500/20 text-blue-400 text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-[24px] uppercase tracking-wider">Editing Notes</div>
+                          <div id="active-pro-editor" className="prose prose-lg max-w-none text-gray-200 focus:outline-none min-h-[400px] note-editor-content" contentEditable suppressContentEditableWarning onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: editedNotes }} />
+                        </div>
                       </div>
                     ) : (
                       <div className="animate-slide-in">
@@ -1344,6 +1515,102 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       )}
 
       {/* Modals */}
+      
+      {/* Folder Create/Edit Modal */}
+      {folderModal.isOpen && (
+        <div className="fixed inset-0 bg-gray-900/60 z-[60] flex items-center justify-center backdrop-blur-sm p-4">
+          <div className="bg-gray-800 rounded-[32px] w-full max-w-sm shadow-2xl border border-gray-700 overflow-hidden animate-slide-in">
+            <div className="p-6 border-b border-gray-700 flex justify-between items-center">
+              <h3 className="font-extrabold text-xl text-white flex items-center gap-2">
+                 {folderModal.type === 'create' ? <FolderPlus className="text-green-400 w-5 h-5" /> : <Edit2 className="text-blue-400 w-5 h-5" />}
+                 {folderModal.type === 'create' ? 'New Folder' : 'Edit Folder'}
+              </h3>
+              <button onClick={() => setFolderModal({...folderModal, isOpen: false})} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-5">
+               <div>
+                  <label className="block text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Folder Emoji</label>
+                  <input type="text" maxLength={2} value={folderModal.emoji} onChange={e=>setFolderModal({...folderModal, emoji: e.target.value})} className="w-full text-center text-3xl bg-gray-700 border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 text-white" />
+               </div>
+               <div>
+                  <label className="block text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Folder Name</label>
+                  <input type="text" value={folderModal.name} onChange={e=>setFolderModal({...folderModal, name: e.target.value})} placeholder="e.g. Science 101" className="w-full bg-gray-700 border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 text-white font-bold" />
+               </div>
+               <div className="pt-2 flex flex-col gap-2">
+                 <button onClick={handleSaveFolder} className="w-full py-3 bg-green-500 text-white rounded-xl font-bold hover:bg-green-600 transition shadow-md">
+                   {folderModal.type === 'create' ? 'Create Folder' : 'Save Changes'}
+                 </button>
+                 {folderModal.type === 'edit' && folderModal.folderId && (
+                    <button onClick={() => deleteFolder(folderModal.folderId!)} className="w-full py-3 bg-red-900/30 text-red-400 rounded-xl font-bold hover:bg-red-900/50 transition">
+                      Delete Folder
+                    </button>
+                 )}
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Context Modal (Pro) */}
+      {addContextModalOpen && (
+        <div className="fixed inset-0 bg-gray-900/70 z-[60] flex items-center justify-center backdrop-blur-sm p-4">
+          <div className="bg-gray-800 rounded-[32px] w-full max-w-2xl shadow-2xl border border-gray-700 overflow-hidden animate-slide-in flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-gray-700 flex justify-between items-center bg-indigo-900/20">
+              <div>
+                <h3 className="font-extrabold text-xl text-white flex items-center gap-2"><Network className="text-indigo-400 w-6 h-6" /> Add Context (Pro)</h3>
+                <p className="text-xs text-indigo-300 mt-1">Provide more material for AI to merge into these notes seamlessly.</p>
+              </div>
+              <button onClick={() => setAddContextModalOpen(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="bg-gray-900/50 p-1.5 rounded-[20px] flex flex-col sm:flex-row gap-1 mb-6 border border-gray-700">
+                <button onClick={() => setContextInputMode('pdf')} className={`flex-1 py-3 px-4 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${contextInputMode === 'pdf' ? 'bg-indigo-600 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}><FileUp className="w-4 h-4" /> PDF</button>
+                <button onClick={() => setContextInputMode('voice')} className={`flex-1 py-3 px-4 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${contextInputMode === 'voice' ? 'bg-indigo-600 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}><Mic className="w-4 h-4" /> Text/Dictate</button>
+                <button onClick={() => setContextInputMode('link')} className={`flex-1 py-3 px-4 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${contextInputMode === 'link' ? 'bg-indigo-600 text-white shadow-md' : 'bg-transparent text-gray-400 hover:bg-gray-700'}`}><LinkIcon className="w-4 h-4" /> YouTube URL</button>
+              </div>
+
+              {contextInputMode === 'pdf' && (
+                <div className="text-center border-2 border-dashed border-gray-600 rounded-[24px] p-8 bg-gray-900/30">
+                  <input type="file" id="context-pdf" multiple accept=".pdf" className="hidden" onChange={(e)=>{
+                     const files = Array.from(e.target.files || []);
+                     setContextPdfFiles(prev => [...prev, ...files]);
+                  }} />
+                  <label htmlFor="context-pdf" className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-xl cursor-pointer font-bold inline-flex items-center gap-2 transition shadow-md">
+                     <FileUp className="w-4 h-4" /> Select PDFs
+                  </label>
+                  <div className="mt-6 flex flex-wrap gap-2 justify-center">
+                    {contextPdfFiles.map((file, i) => (
+                      <span key={i} className="bg-indigo-900/40 text-indigo-300 text-xs px-3 py-1.5 rounded-full font-bold border border-indigo-800 flex items-center gap-2">
+                        {file.name}
+                        <button onClick={() => setContextPdfFiles(contextPdfFiles.filter((_, idx)=>idx!==i))} className="hover:text-red-400"><X className="w-3 h-3" /></button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {contextInputMode === 'voice' && (
+                <textarea value={contextVoiceText} onChange={e=>setContextVoiceText(e.target.value)} className="w-full h-48 p-4 border border-gray-600 rounded-2xl focus:outline-none focus:border-indigo-500 bg-gray-900 text-white" placeholder="Type or dictate additional context..." />
+              )}
+              {contextInputMode === 'link' && (
+                <input type="text" id="context-url-input" className="w-full border border-gray-600 rounded-xl px-4 py-4 focus:outline-none focus:border-indigo-500 bg-gray-900 text-white" placeholder="Paste a YouTube URL here..." />
+              )}
+            </div>
+
+            <div className="p-6 border-t border-gray-700 bg-gray-800">
+               <button 
+                  onClick={handleAddContext} 
+                  disabled={isAddingContextLoading}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
+               >
+                 {isAddingContextLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Network className="w-5 h-5" />}
+                 {isAddingContextLoading ? 'Integrating into Notes...' : 'Integrate Context'}
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {translateModalOpen && (
         <div className="fixed inset-0 bg-gray-900/60 z-50 flex items-center justify-center backdrop-blur-sm p-4">
           <div className="bg-gray-800 rounded-[32px] w-full max-w-md shadow-2xl border border-gray-700">
