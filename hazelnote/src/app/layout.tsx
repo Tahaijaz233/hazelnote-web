@@ -15,11 +15,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased bg-[#0F172A]">{children}</body>
     </html>
   );
 }
