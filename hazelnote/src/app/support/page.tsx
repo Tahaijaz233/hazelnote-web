@@ -24,7 +24,7 @@ export default function Support() {
     },
     {
       question: 'Is HazelNote actually free?',
-      answer: 'Yes! Our free plan allows up to 2 study sets per month and up to 10MB PDF uploads. You can upgrade to Pro at any time if you need unlimited access and advanced AI features.',
+      answer: 'Yes! Our free plan allows up to 2 study sets per month and up to 5MB PDF uploads. You can upgrade to Pro at any time if you need unlimited access and advanced AI features.',
     },
     {
       question: 'Can I translate my notes?',
