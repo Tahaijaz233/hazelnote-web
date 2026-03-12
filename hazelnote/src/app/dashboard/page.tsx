@@ -13,19 +13,9 @@ import {
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
 import katex from 'katex';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-
-// Mock Next.js & Local Dependencies for Canvas Environment
-const Link = ({ href, children, className, onClick }: any) => <a href={href} className={className} onClick={onClick}>{children}</a>;
-const useRouter = () => ({ push: (url: string) => { window.location.href = url; } });
-const useSearchParams = () => new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "mock" };
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { auth, db } from '@/lib/firebase';
 
 interface StudySet { id: number; title: string; date: string; summary: string; flashcardCount: number; quizCount: number; parts: string[]; podcast: string; chatCount: number; folderId?: string; }
 interface UserStats { streak: number; notes: number; lastDate: string | null; monthlySets: Record<string, number>; }
@@ -232,7 +222,7 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml, editorRangeRef }: any) => {
   );
 };
 
-export default function DashboardContent() {
+function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setParam = searchParams.get('set');
@@ -533,7 +523,7 @@ export default function DashboardContent() {
     setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
     try { await deleteAudioFromDB(`podcast_${setId}`); } catch(e){}
     if (user&&tier==='pro') { try { await deleteDoc(doc(db,'profiles',user.uid,'study_sets',setId.toString())); } catch(err){} }
-    if (currentStudySet?.id===setId) { setCurrentView('dashboard'); window.history.pushState(null,'','/dashboard/'); }
+    if (currentStudySet?.id===setId) { setCurrentView('dashboard'); router.push('/dashboard/'); }
   };
 
   const callLLM = async (systemPrompt:string,userText:string,files?:File[]) => {
@@ -770,7 +760,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     setChatMessages([{role:'ai',text:`Hi! I've analyzed <b>${studySet.title}</b>. How can I help?`}]);
     setCurrentView('study');
     setCurrentTab('notes');
-    if (updateUrl) window.history.pushState(null,'',`?set=${studySet.id}`);
+    if (updateUrl) router.push(`?set=${studySet.id}`);
   };
 
   const translateNotes = async () => {
@@ -789,7 +779,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       const newSet:StudySet = {
         ...currentStudySet,id:Date.now(),title:`${currentStudySet.title} (${lang})`,
         parts:newParts.length>=5?newParts:currentStudySet.parts,
-        podcast:newPodcastText?newPodcastText.trim():currentStudySet.podcast,date:new Date().toISOString(),
+        podcast:newPodcastText?newPodcastText.trim():currentStudySet.podcast,date:new DatetoISOString(),
       };
       clearInterval(interval); setTranslateProgress(100);
       setTimeout(()=>{
@@ -1162,8 +1152,8 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       </div>
       <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
         <div className="px-2 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Workspace</div>
-        <button onClick={()=>{setCurrentView('dashboard');setSidebarOpen(false);window.history.pushState(null,'','/dashboard/');}} className={`w-full text-left sidebar-item ${currentView==='dashboard'?'active':''}`}><LayoutDashboard className="w-5 h-5"/> Dashboard</button>
-        <button onClick={()=>{setCurrentView('create');setSidebarOpen(false);window.history.pushState(null,'','/dashboard/');}} className={`w-full text-left sidebar-item ${currentView==='create'?'active':''}`}><PlusCircle className="w-5 h-5"/> Create Notes</button>
+        <button onClick={()=>{setCurrentView('dashboard');setSidebarOpen(false);router.push('/dashboard/');}} className={`w-full text-left sidebar-item ${currentView==='dashboard'?'active':''}`}><LayoutDashboard className="w-5 h-5"/> Dashboard</button>
+        <button onClick={()=>{setCurrentView('create');setSidebarOpen(false);router.push('/dashboard/');}} className={`w-full text-left sidebar-item ${currentView==='create'?'active':''}`}><PlusCircle className="w-5 h-5"/> Create Notes</button>
         <Link href="/exam/" className="w-full text-left sidebar-item flex items-center gap-3"><ClipboardList className="w-5 h-5"/> Take an Exam</Link>
         <Link href="/professor/" className="w-full text-left sidebar-item flex items-center gap-3"><Bot className="w-5 h-5"/> Professor Hazel</Link>
       </nav>
@@ -1406,7 +1396,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         {currentView==='study'&&currentStudySet&&(
           <div className="p-4 md:p-8 max-w-6xl mx-auto pb-32 pt-6 md:pt-10 relative">
             <div className="mb-6 flex justify-between items-center">
-              <button onClick={()=>{setCurrentView('dashboard');window.history.pushState(null,'','/dashboard/');}} className="text-gray-400 hover:text-white transition flex items-center gap-2 text-sm font-medium"><ArrowLeft className="w-4 h-4"/> Back</button>
+              <button onClick={()=>{setCurrentView('dashboard');router.push('/dashboard/');}} className="text-gray-400 hover:text-white transition flex items-center gap-2 text-sm font-medium"><ArrowLeft className="w-4 h-4"/> Back</button>
             </div>
             <div className="glass-card bg-gray-800/50 backdrop-blur-lg border-gray-700 relative overflow-visible">
               <div className="border-b border-gray-700 bg-gray-800/50 p-6 md:px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6 rounded-t-[24px]">
@@ -1754,3 +1744,11 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     </div>
   );
 }
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#0F172A] text-white">Loading...</div>}>
+      <DashboardContent />
+    </Suspense>
+  );
+}s
