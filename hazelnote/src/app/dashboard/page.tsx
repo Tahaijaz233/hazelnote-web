@@ -48,7 +48,12 @@ import {
   FolderPlus,
   Network,
   Paperclip,
-  Check
+  Check,
+  List,
+  ListOrdered,
+  AlignLeft,
+  AlignCenter,
+  AlignRight
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
@@ -65,6 +70,8 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   const [savedRange, setSavedRange] = useState<Range | null>(null);
   const [activeColor, setActiveColor] = useState<string | null>(null);
   const [activeBgColor, setActiveBgColor] = useState<string | null>(null);
+  const [selectedFont, setSelectedFont] = useState('Font');
+  const [selectedSize, setSelectedSize] = useState('Size');
   
   const colors = ['#000000', '#FFFFFF', '#EF4444', '#22C55E', '#3B82F6', '#F59E0B', '#A855F7', '#EC4899'];
   const highlights = ['transparent', '#FEF08A', '#BBF7D0', '#BFDBFE', '#FBCFE8', '#FED7AA', '#E9D5FF'];
@@ -89,12 +96,15 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   };
 
   const togglePopup = (tool: string) => {
-    saveSelection();
+    // Only capture focus range when opening tools that contain interactive inputs (Math, Table, Image)
+    if (tool === 'math' || tool === 'table' || tool === 'image') {
+       saveSelection();
+    }
     setActivePopup(activePopup === tool ? null : tool);
   };
 
   const executeFormat = (cmd: string, val?: string) => {
-    restoreSelection();
+    // Rely exclusively on the browser's active selection natively (do NOT use restoreSelection here)
     onFormat(cmd, val);
     setActivePopup(null);
   };
@@ -117,7 +127,7 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
       const reader = new FileReader();
       reader.onload = (ev) => {
         restoreSelection();
-        onInsertHtml(`<img src="${ev.target?.result}" class="max-w-full h-auto rounded-lg my-4 border border-gray-600 shadow-md" alt="Uploaded Image" />`);
+        onInsertHtml(`<div style="display: inline-block; resize: both; overflow: hidden; max-width: 100%; border: 1px dashed #4b5563; padding: 4px; margin: 1rem 0; width: 300px; min-width: 50px; min-height: 50px;"><img src="${ev.target?.result}" style="width: 100%; height: 100%; object-fit: contain;" alt="Uploaded Image" /></div><p><br></p>`);
         setActivePopup(null);
       };
       reader.readAsDataURL(file);
@@ -126,7 +136,7 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
 
   const handleInsertTable = () => {
     restoreSelection();
-    let html = '<table class="w-full border-collapse border border-gray-600 my-4 text-left"><tbody>';
+    let html = `<div style="resize: both; overflow: auto; width: 100%; min-height: 60px; border: 1px dashed #4b5563; padding: 4px; margin-bottom: 1rem;"><table class="w-full h-full border-collapse border border-gray-600 text-left"><tbody>`;
     for(let i = 0; i < tableRows; i++) {
         html += '<tr>';
         for(let j = 0; j < tableCols; j++) {
@@ -134,7 +144,7 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
         }
         html += '</tr>';
     }
-    html += '</tbody></table><br>';
+    html += '</tbody></table></div><p><br></p>';
     onInsertHtml(html);
     setActivePopup(null);
   };
@@ -142,18 +152,19 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   return (
     <div className="sticky top-20 z-[60] bg-gray-900/95 backdrop-blur-md border border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-2xl rounded-2xl mb-6 transition-all"
          onMouseDown={(e) => {
+             // Keeps focus locked on the editor
              if(e.target === e.currentTarget) e.preventDefault()
          }}>
       
       {/* Font Family */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
         <button onMouseDown={(e) => { e.preventDefault(); togglePopup('fontFamily'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition text-sm font-bold flex items-center gap-1" title="Font Family">
-          Font <ChevronDown className="w-3 h-3" />
+          {selectedFont} <ChevronDown className="w-3 h-3" />
         </button>
         {activePopup === 'fontFamily' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[140px]">
             {fonts.map(font => (
-              <button key={font} className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" style={{ fontFamily: font }} onMouseDown={(e) => { e.preventDefault(); executeFormat('fontName', font); }}>{font}</button>
+              <button key={font} className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" style={{ fontFamily: font }} onMouseDown={(e) => { e.preventDefault(); setSelectedFont(font); executeFormat('fontName', font); }}>{font}</button>
             ))}
           </div>
         )}
@@ -161,13 +172,15 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
 
       {/* Font Size */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('font'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Font Size"><Type className="w-4 h-4" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('font'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition text-sm font-bold flex items-center gap-1" title="Font Size">
+          {selectedSize === 'Size' ? <><Type className="w-4 h-4" /> <ChevronDown className="w-3 h-3 ml-1" /></> : <>{selectedSize} <ChevronDown className="w-3 h-3 ml-1" /></>}
+        </button>
         {activePopup === 'font' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[120px]">
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); executeFormat('fontSize', '1'); }}>Small</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); executeFormat('fontSize', '3'); }}>Normal</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); executeFormat('fontSize', '5'); }}>Large</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); executeFormat('fontSize', '7'); }}>Huge</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Small'); executeFormat('fontSize', '1'); }}>Small</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Normal'); executeFormat('fontSize', '3'); }}>Normal</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Large'); executeFormat('fontSize', '5'); }}>Large</button>
+            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Huge'); executeFormat('fontSize', '7'); }}>Huge</button>
           </div>
         )}
       </div>
@@ -205,6 +218,19 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Alignment */}
+      <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
+        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('justifyLeft'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Align Left"><AlignLeft className="w-4 h-4" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('justifyCenter'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Align Center"><AlignCenter className="w-4 h-4" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('justifyRight'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Align Right"><AlignRight className="w-4 h-4" /></button>
+      </div>
+
+      {/* Lists */}
+      <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
+        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('insertUnorderedList'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Bullet List"><List className="w-4 h-4" /></button>
+        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('insertOrderedList'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Numbered List"><ListOrdered className="w-4 h-4" /></button>
       </div>
 
       {/* Advanced Inserts */}
