@@ -8,18 +8,9 @@ import {
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-
-// Mock Next.js & Local Dependencies for Canvas Environment
-const Link = ({ href, children, className, onClick }: any) => <a href={href} className={className} onClick={onClick}>{children}</a>;
-const useRouter = () => ({ push: (url: string) => { window.location.href = url; } });
-
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "mock" };
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { auth, db } from '@/lib/firebase';
 
 interface StudySet { id: number; title: string; date: string; summary: string; flashcardCount: number; quizCount: number; parts: string[]; podcast: string; chatCount: number; folderId?: string; }
 
