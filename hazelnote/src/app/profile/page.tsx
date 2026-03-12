@@ -4,21 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  LayoutDashboard,
-  PlusCircle,
-  ClipboardList,
-  UserCircle,
-  HelpCircle,
-  Menu,
-  X,
-  Activity,
-  Settings,
-  CreditCard,
-  AlertTriangle,
-  LogOut,
-  Trash2,
+  LayoutDashboard, PlusCircle, ClipboardList, UserCircle, HelpCircle,
+  Menu, X, Activity, Settings, CreditCard, AlertTriangle, LogOut, Trash2, KeyRound, Eye, EyeOff,
 } from 'lucide-react';
-import { onAuthStateChanged, signOut, deleteUser } from 'firebase/auth';
+import {
+  onAuthStateChanged, signOut, deleteUser,
+  updatePassword, reauthenticateWithCredential, EmailAuthProvider,
+} from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { safeParseJSON, getCurrentMonth } from '@/lib/utils';
@@ -28,36 +20,47 @@ export default function Profile() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(true); // Default to true as per new requirement
+  const [darkMode, setDarkMode] = useState(true);
   const [stats, setStats] = useState<any>({ streak: 0, notes: 0, monthlySets: {} });
   const [tier, setTier] = useState<'free' | 'pro'>('free');
+
+  // Change password state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwStatus, setPwStatus] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [isEmailUser, setIsEmailUser] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
+        const isEmail = u.providerData?.some((p: any) => p.providerId === 'password');
+        setIsEmailUser(!!isEmail);
+
         const profileRef = doc(db, 'profiles', u.uid);
         const snap = await getDoc(profileRef);
         if (snap.exists()) {
           const p = snap.data();
           setProfile(p);
           setTier(p.is_pro ? 'pro' : 'free');
-          
           if (p.stats) setStats(p.stats);
         }
       }
     });
 
     setStats(safeParseJSON('hz_stats', { streak: 0, notes: 0, monthlySets: {} }));
-    
-    // Check local storage or fallback to our new default true state
+
     const isDark = localStorage.getItem('hz_dark_mode');
     if (isDark !== null) {
-        setDarkMode(isDark === 'true');
-        if (isDark === 'true') document.documentElement.classList.add('dark');
-        else document.documentElement.classList.remove('dark');
+      setDarkMode(isDark === 'true');
+      if (isDark === 'true') document.documentElement.classList.add('dark');
+      else document.documentElement.classList.remove('dark');
     } else {
-        document.documentElement.classList.add('dark');
+      document.documentElement.classList.add('dark');
     }
 
     return () => unsubscribe();
@@ -66,14 +69,9 @@ export default function Profile() {
   const toggleDarkMode = () => {
     const newDarkMode = !darkMode;
     setDarkMode(newDarkMode);
-    if (newDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('hz_dark_mode', String(newDarkMode));
-    }
+    if (newDarkMode) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+    if (typeof window !== 'undefined') localStorage.setItem('hz_dark_mode', String(newDarkMode));
   };
 
   const handleLogout = async () => {
@@ -98,6 +96,30 @@ export default function Profile() {
     }
   };
 
+  const handleChangePassword = async () => {
+    if (!user) return;
+    if (!currentPassword) { setPwStatus('Please enter your current password.'); return; }
+    if (newPassword.length < 8) { setPwStatus('New password must be at least 8 characters.'); return; }
+    if (newPassword !== confirmPassword) { setPwStatus('New passwords do not match.'); return; }
+
+    setPwLoading(true);
+    setPwStatus('');
+    try {
+      const credential = EmailAuthProvider.credential(user.email, currentPassword);
+      await reauthenticateWithCredential(user, credential);
+      await updatePassword(user, newPassword);
+      setPwStatus('✅ Password changed successfully!');
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+    } catch (e: any) {
+      if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+        setPwStatus('❌ Current password is incorrect.');
+      } else {
+        setPwStatus('❌ Error: ' + (e.message || 'Failed to change password.'));
+      }
+    }
+    setPwLoading(false);
+  };
+
   const month = getCurrentMonth();
   const monthlyCount = stats.monthlySets?.[month] || 0;
   const usagePercentage = tier === 'free' ? Math.min((monthlyCount / 2) * 100, 100) : 100;
@@ -112,65 +134,34 @@ export default function Profile() {
             <span className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-wider">by free-ed</span>
           </div>
         </Link>
-        <button onClick={() => setSidebarOpen(false)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition dark:text-gray-400 dark:hover:bg-gray-800">
-          <X className="w-5 h-5" />
-        </button>
+        <button onClick={() => setSidebarOpen(false)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition dark:text-gray-400 dark:hover:bg-gray-800"><X className="w-5 h-5" /></button>
       </div>
-      
       <div className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">Workspace</div>
       <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
-        <Link href="/dashboard/" className="w-full text-left sidebar-item flex items-center gap-3">
-          <LayoutDashboard className="w-5 h-5" /> Dashboard
-        </Link>
-        <Link href="/dashboard/#create" className="w-full text-left sidebar-item flex items-center gap-3">
-          <PlusCircle className="w-5 h-5" /> Create Notes
-        </Link>
-        <Link href="/exam/" className="w-full text-left sidebar-item flex items-center gap-3">
-          <ClipboardList className="w-5 h-5" /> Take an Exam
-        </Link>
+        <Link href="/dashboard/" className="w-full text-left sidebar-item flex items-center gap-3"><LayoutDashboard className="w-5 h-5" /> Dashboard</Link>
+        <Link href="/dashboard/#create" className="w-full text-left sidebar-item flex items-center gap-3"><PlusCircle className="w-5 h-5" /> Create Notes</Link>
+        <Link href="/exam/" className="w-full text-left sidebar-item flex items-center gap-3"><ClipboardList className="w-5 h-5" /> Take an Exam</Link>
       </nav>
-
       <div className="p-4 border-t border-gray-200 dark:border-gray-800 space-y-1">
-        {tier === 'free' && (
-          <div className="mb-2">
-            <Link href="/pricing/" className="w-full go-pro-badge py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm">
-              ⚡ Upgrade to Pro
-            </Link>
-          </div>
-        )}
-        <Link href="/profile/" className="w-full text-left sidebar-item active flex items-center gap-3 font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
-          <UserCircle className="w-5 h-5" /> Profile & Settings
-        </Link>
-        <Link href="/support/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white">
-          <HelpCircle className="w-5 h-5" /> Support
-        </Link>
+        {tier === 'free' && <div className="mb-2"><Link href="/pricing/" className="w-full go-pro-badge py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm">⚡ Upgrade to Pro</Link></div>}
+        <Link href="/profile/" className="w-full text-left sidebar-item active flex items-center gap-3 font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"><UserCircle className="w-5 h-5" /> Profile & Settings</Link>
+        <Link href="/support/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"><HelpCircle className="w-5 h-5" /> Support</Link>
       </div>
     </aside>
   );
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-slate-900">
-      {sidebarOpen && (
-        <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm" />
-      )}
-
+      {sidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm" />}
       <Sidebar />
-
       <main className="flex-1 h-full overflow-y-auto pb-12 relative">
-        <button 
-          onClick={() => setSidebarOpen(true)} 
-          className="hidden md:flex fixed top-4 left-4 z-30 p-2 bg-gray-800/80 backdrop-blur border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition items-center gap-2"
-        >
-          <Menu className="w-5 h-5" />
-          <span className="text-sm font-medium">Menu</span>
+        <button onClick={() => setSidebarOpen(true)} className="hidden md:flex fixed top-4 left-4 z-30 p-2 bg-gray-800/80 backdrop-blur border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition items-center gap-2">
+          <Menu className="w-5 h-5" /><span className="text-sm font-medium">Menu</span>
         </button>
-
         <div className="md:hidden bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center gap-3 sticky top-0 z-30">
-          <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition">
-            <Menu className="w-6 h-6" />
-          </button>
+          <button onClick={() => setSidebarOpen(true)} className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition"><Menu className="w-6 h-6" /></button>
           <div className="flex items-center gap-2">
-            <img src="/hazelnote_logo.png" alt="HazelNote Logo" className="w-8 h-8 rounded-lg object-cover" />
+            <img src="/hazelnote_logo.png" className="w-8 h-8 rounded-lg object-cover" />
             <span className="font-extrabold text-lg text-gray-900 dark:text-white">HazelNote</span>
           </div>
         </div>
@@ -222,6 +213,67 @@ export default function Profile() {
                 </button>
               </div>
             </div>
+
+            {/* Change Password — only shown for email/password users */}
+            {isEmailUser && (
+              <div className="glass-card p-6 dark:bg-gray-800 dark:border-gray-700">
+                <h3 className="text-xl font-bold mb-4 border-b border-gray-100 dark:border-gray-700 pb-2 flex items-center gap-2">
+                  <KeyRound className="w-5 h-5 text-yellow-500" /> Change Password
+                </h3>
+                <div className="space-y-4 max-w-sm">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Current Password</label>
+                    <div className="relative">
+                      <input
+                        type={showCurrentPw ? 'text' : 'password'}
+                        value={currentPassword}
+                        onChange={e => setCurrentPassword(e.target.value)}
+                        placeholder="Enter current password"
+                        className="w-full bg-gray-700 border border-gray-600 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500 pr-10"
+                      />
+                      <button type="button" onClick={() => setShowCurrentPw(!showCurrentPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+                        {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">New Password</label>
+                    <div className="relative">
+                      <input
+                        type={showNewPw ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        placeholder="Min 8 characters"
+                        className="w-full bg-gray-700 border border-gray-600 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500 pr-10"
+                      />
+                      <button type="button" onClick={() => setShowNewPw(!showNewPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
+                        {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Confirm New Password</label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      placeholder="Repeat new password"
+                      className="w-full bg-gray-700 border border-gray-600 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500"
+                    />
+                  </div>
+                  {pwStatus && (
+                    <p className={`text-sm font-medium ${pwStatus.startsWith('✅') ? 'text-green-400' : 'text-red-400'}`}>{pwStatus}</p>
+                  )}
+                  <button
+                    onClick={handleChangePassword}
+                    disabled={pwLoading}
+                    className="w-full py-2.5 bg-yellow-500 hover:bg-yellow-600 text-black font-bold rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {pwLoading ? <><span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin"></span>Updating...</> : <><KeyRound className="w-4 h-4" />Update Password</>}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <section className="glass-card p-6 border border-green-100 dark:border-green-800 dark:bg-gray-800">
               <h3 className="text-xl font-extrabold text-gray-900 dark:text-white mb-4 text-left flex items-center gap-2">
