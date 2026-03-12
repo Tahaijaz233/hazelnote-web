@@ -20,7 +20,6 @@ body {
   overflow-x: hidden;
 }
 
-/* Gradient text */
 .gradient-text {
   background: linear-gradient(135deg, #10B981, #3B82F6);
   -webkit-background-clip: text;
@@ -28,7 +27,6 @@ body {
   background-clip: text;
 }
 
-/* Glass card */
 .glass-card {
   background: rgba(30, 41, 59, 0.7);
   border-radius: 24px;
@@ -37,7 +35,6 @@ body {
   backdrop-filter: blur(10px);
 }
 
-/* Button primary */
 .btn-primary {
   background: #10B981;
   color: white;
@@ -53,7 +50,6 @@ body {
   box-shadow: 0 4px 12px rgba(16,185,129,.3);
 }
 
-/* Go Pro badge */
 .go-pro-badge {
   background: linear-gradient(135deg, #F59E0B, #EF4444);
   color: white;
@@ -70,7 +66,6 @@ body {
   box-shadow: 0 4px 12px rgba(245,158,11,.5);
 }
 
-/* Sidebar items */
 .sidebar-item {
   display: flex;
   align-items: center;
@@ -92,7 +87,6 @@ body {
   color: #34D399;
 }
 
-/* Flip cards */
 .flip-card {
   width: 100%;
   height: 220px;
@@ -147,7 +141,6 @@ body {
   border: 1px solid #047857;
 }
 
-/* Prose / Notes */
 .prose strong {
   color: #34D399;
   font-weight: 700;
@@ -213,7 +206,6 @@ body {
   background: #1E293B;
 }
 
-/* KaTeX Math Styling */
 .katex {
   font-size: 1.1em;
 }
@@ -224,7 +216,6 @@ body {
   overflow-y: hidden;
 }
 
-/* Note Editor Styles */
 .note-editor-content {
   min-height: 400px;
   outline: none;
@@ -246,7 +237,18 @@ body {
   padding: 8px 12px;
 }
 
-/* Scrollbar */
+/* Font face attribute styling — maps <font face="..."> elements created by execCommand('fontName') */
+font[face="Arial"] { font-family: Arial, sans-serif !important; }
+font[face="Times New Roman"] { font-family: 'Times New Roman', serif !important; }
+font[face="Courier New"] { font-family: 'Courier New', monospace !important; }
+font[face="Georgia"] { font-family: Georgia, serif !important; }
+font[face="Verdana"] { font-family: Verdana, sans-serif !important; }
+font[face="Inter"] { font-family: 'Inter', sans-serif !important; }
+font[face="Roboto"] { font-family: 'Roboto', sans-serif !important; }
+font[face="Open Sans"] { font-family: 'Open Sans', sans-serif !important; }
+font[face="Lora"] { font-family: 'Lora', serif !important; }
+font[face="Playfair Display"] { font-family: 'Playfair Display', serif !important; }
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -265,7 +267,6 @@ body {
   background: #475569;
 }
 
-/* Animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -306,7 +307,6 @@ body {
   animation: slide-in 0.3s ease-out;
 }
 
-/* Dark mode toggle */
 #dark-mode-toggle {
   width: 36px;
   height: 18px;
@@ -340,7 +340,6 @@ body {
   transform: translateX(18px);
 }
 
-/* Print styles */
 @media print {
   aside, .no-print {
     display: none !important;
@@ -358,7 +357,6 @@ body {
   }
 }
 
-/* Responsive */
 @media (max-width: 768px) {
   .prose table {
     font-size: 0.875rem;
