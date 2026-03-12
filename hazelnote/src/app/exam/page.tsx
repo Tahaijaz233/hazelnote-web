@@ -1,8 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard, PlusCircle, ClipboardList, UserCircle, HelpCircle,
   Menu, X, Search, FileText, List, Clock, Award, Save, Sparkles, Bot,
@@ -10,9 +8,24 @@ import {
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
-import { safeParseJSON, saveToStorage, getCurrentMonth } from '@/lib/utils';
-import { StudySet } from '@/types';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+
+// Mock Next.js & Local Dependencies for Canvas Environment
+const Link = ({ href, children, className, onClick }: any) => <a href={href} className={className} onClick={onClick}>{children}</a>;
+const useRouter = () => ({ push: (url: string) => { window.location.href = url; } });
+
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "mock" };
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+interface StudySet { id: number; title: string; date: string; summary: string; flashcardCount: number; quizCount: number; parts: string[]; podcast: string; chatCount: number; folderId?: string; }
+
+const safeParseJSON = <T,>(key: string, fallback: T): T => { if (typeof window === 'undefined') return fallback; try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : fallback; } catch { return fallback; } };
+const saveToStorage = (key: string, value: any) => { if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value)); };
+const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 
 interface MarkingResult {
   score: number;
@@ -676,4 +689,3 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
     </div>
   );
 }
-```
