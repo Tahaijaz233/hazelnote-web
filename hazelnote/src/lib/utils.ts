@@ -124,3 +124,61 @@ export function pcmToWav(pcmData: ArrayBuffer, sampleRate = 24000): Blob {
 
   return new Blob([buffer], { type: 'audio/wav' });
 }
+
+// --- IndexedDB for Audio Caching ---
+export async function saveAudioToDB(id: string, base64: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('HazelNoteDB', 1);
+    request.onupgradeneeded = (e: any) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('podcasts')) {
+        db.createObjectStore('podcasts', { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = (e: any) => {
+      const db = e.target.result;
+      const tx = db.transaction('podcasts', 'readwrite');
+      const store = tx.objectStore('podcasts');
+      store.put({ id, base64 });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function getAudioFromDB(id: string): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('HazelNoteDB', 1);
+    request.onupgradeneeded = (e: any) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('podcasts')) {
+        db.createObjectStore('podcasts', { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = (e: any) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('podcasts')) return resolve(null);
+      const tx = db.transaction('podcasts', 'readonly');
+      const store = tx.objectStore('podcasts');
+      const getReq = store.get(id);
+      getReq.onsuccess = () => resolve(getReq.result ? getReq.result.base64 : null);
+      getReq.onerror = () => reject(getReq.error);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function deleteAudioFromDB(id: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('HazelNoteDB', 1);
+    request.onsuccess = (e: any) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('podcasts')) return resolve();
+      const tx = db.transaction('podcasts', 'readwrite');
+      const store = tx.objectStore('podcasts');
+      store.delete(id);
+      tx.oncomplete = () => resolve();
+    };
+  });
+}
