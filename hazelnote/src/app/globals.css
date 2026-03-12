@@ -237,7 +237,7 @@ body {
   padding: 8px 12px;
 }
 
-/* Font face attribute styling — maps <font face="..."> elements created by execCommand('fontName') */
+/* Font face attribute styling */
 font[face="Arial"] { font-family: Arial, sans-serif !important; }
 font[face="Times New Roman"] { font-family: 'Times New Roman', serif !important; }
 font[face="Courier New"] { font-family: 'Courier New', monospace !important; }
@@ -248,6 +248,17 @@ font[face="Roboto"] { font-family: 'Roboto', sans-serif !important; }
 font[face="Open Sans"] { font-family: 'Open Sans', sans-serif !important; }
 font[face="Lora"] { font-family: 'Lora', serif !important; }
 font[face="Playfair Display"] { font-family: 'Playfair Display', serif !important; }
+
+/* Voice Wave Animation */
+@keyframes voiceWave {
+  0%, 100% { transform: scaleY(0.15); opacity: 0.5; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
+.voice-wave-bar {
+  animation: voiceWave 0.7s ease-in-out infinite;
+  transform-origin: bottom center;
+}
 
 ::-webkit-scrollbar {
   width: 8px;
