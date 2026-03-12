@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { Suspense, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   PlusCircle,
@@ -62,12 +62,12 @@ import { StudySet, UserStats, Folder } from '@/types';
 import { safeParseJSON, saveToStorage, renderMarkdownWithMath, getCurrentMonth, pcmToWav, base64ToArrayBuffer } from '@/lib/utils';
 import katex from 'katex';
 
-const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
+const NoteEditorToolbar = ({ onFormat, onInsertHtml, editorRangeRef }: any) => {
   const [activePopup, setActivePopup] = useState<string | null>(null);
   const [mathInput, setMathInput] = useState('');
   const [tableRows, setTableRows] = useState(3);
   const [tableCols, setTableCols] = useState(3);
-  const [savedRange, setSavedRange] = useState<Range | null>(null);
+  
   const [activeColor, setActiveColor] = useState<string | null>(null);
   const [activeBgColor, setActiveBgColor] = useState<string | null>(null);
   const [selectedFont, setSelectedFont] = useState('Font');
@@ -75,36 +75,25 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   
   const colors = ['#000000', '#FFFFFF', '#EF4444', '#22C55E', '#3B82F6', '#F59E0B', '#A855F7', '#EC4899'];
   const highlights = ['transparent', '#FEF08A', '#BBF7D0', '#BFDBFE', '#FBCFE8', '#FED7AA', '#E9D5FF'];
-  const fonts = ['Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana', 'Inter'];
+  const fonts = ['Arial', 'Times New Roman', 'Courier New', 'Georgia', 'Verdana', 'Inter', 'Roboto', 'Open Sans', 'Lora', 'Playfair Display'];
   
-  const saveSelection = () => {
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
-      setSavedRange(sel.getRangeAt(0));
-    }
-  };
-
   const restoreSelection = () => {
     const editor = document.getElementById('active-pro-editor');
     if (editor && document.activeElement !== editor) editor.focus();
     
-    if (savedRange) {
+    if (editorRangeRef?.current) {
       const sel = window.getSelection();
       sel?.removeAllRanges();
-      sel?.addRange(savedRange);
+      sel?.addRange(editorRangeRef.current);
     }
   };
 
   const togglePopup = (tool: string) => {
-    // Only capture focus range when opening tools that contain interactive inputs (Math, Table, Image)
-    if (tool === 'math' || tool === 'table' || tool === 'image') {
-       saveSelection();
-    }
     setActivePopup(activePopup === tool ? null : tool);
   };
 
   const executeFormat = (cmd: string, val?: string) => {
-    // Rely exclusively on the browser's active selection natively (do NOT use restoreSelection here)
+    restoreSelection();
     onFormat(cmd, val);
     setActivePopup(null);
   };
@@ -113,7 +102,7 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
     restoreSelection();
     try {
       const html = katex.renderToString(mathInput, { throwOnError: false });
-      onInsertHtml(`&nbsp;<span class="inline-math" contenteditable="false" data-tex="${mathInput}">${html}</span>&nbsp;`);
+      onInsertHtml(`&nbsp;<span class="inline-math" contenteditable="false" data-tex="${mathInput}" style="display: inline-block; cursor: move; padding: 2px 4px; border: 1px dashed transparent; border-radius: 4px;">${html}</span>&nbsp;`);
     } catch {
       onFormat('insertText', ` $${mathInput}$ `);
     }
@@ -127,7 +116,13 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
       const reader = new FileReader();
       reader.onload = (ev) => {
         restoreSelection();
-        onInsertHtml(`<div style="display: inline-block; resize: both; overflow: hidden; max-width: 100%; border: 1px dashed #4b5563; padding: 4px; margin: 1rem 0; width: 300px; min-width: 50px; min-height: 50px;"><img src="${ev.target?.result}" style="width: 100%; height: 100%; object-fit: contain;" alt="Uploaded Image" /></div><p><br></p>`);
+        onInsertHtml(`
+          <div contenteditable="false" style="display: inline-block; margin: 0.5rem; cursor: move;">
+            <div contenteditable="true" style="resize: both; overflow: hidden; max-width: 100%; border: 2px dashed #4b5563; padding: 4px; width: 300px; min-width: 50px; min-height: 50px;">
+              <img src="${ev.target?.result}" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none;" alt="Uploaded Image" />
+            </div>
+          </div><p><br></p>
+        `);
         setActivePopup(null);
       };
       reader.readAsDataURL(file);
@@ -136,7 +131,11 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
 
   const handleInsertTable = () => {
     restoreSelection();
-    let html = `<div style="resize: both; overflow: auto; width: 100%; min-height: 60px; border: 1px dashed #4b5563; padding: 4px; margin-bottom: 1rem;"><table class="w-full h-full border-collapse border border-gray-600 text-left"><tbody>`;
+    let html = `
+      <div contenteditable="false" style="display: block; margin: 1rem 0; cursor: move; padding: 4px; background: rgba(255,255,255,0.02); border-radius: 8px;">
+         <div contenteditable="true" style="resize: both; overflow: auto; width: 100%; border: 1px dashed #4b5563; min-height: 60px;">
+             <table class="w-full h-full border-collapse border border-gray-600 text-left"><tbody>
+    `;
     for(let i = 0; i < tableRows; i++) {
         html += '<tr>';
         for(let j = 0; j < tableCols; j++) {
@@ -144,7 +143,7 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
         }
         html += '</tr>';
     }
-    html += '</tbody></table></div><p><br></p>';
+    html += '</tbody></table></div></div><p><br></p>';
     onInsertHtml(html);
     setActivePopup(null);
   };
@@ -152,19 +151,28 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   return (
     <div className="sticky top-20 z-[60] bg-gray-900/95 backdrop-blur-md border border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-2xl rounded-2xl mb-6 transition-all"
          onMouseDown={(e) => {
-             // Keeps focus locked on the editor
-             if(e.target === e.currentTarget) e.preventDefault()
+             // Keeps focus locked on the editor unless interacting with input fields
+             if (e.target instanceof HTMLInputElement) return;
+             e.preventDefault();
          }}>
       
       {/* Font Family */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('fontFamily'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition text-sm font-bold flex items-center gap-1" title="Font Family">
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); togglePopup('fontFamily'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition text-sm font-bold flex items-center gap-1" title="Font Family">
           {selectedFont} <ChevronDown className="w-3 h-3" />
         </button>
         {activePopup === 'fontFamily' && (
-          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[140px]">
+          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[150px] max-h-64 overflow-y-auto">
             {fonts.map(font => (
-              <button key={font} className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" style={{ fontFamily: font }} onMouseDown={(e) => { e.preventDefault(); setSelectedFont(font); executeFormat('fontName', font); }}>{font}</button>
+              <button 
+                 key={font} 
+                 type="button"
+                 className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" 
+                 style={{ fontFamily: font }} 
+                 onMouseDown={(e) => { e.preventDefault(); setSelectedFont(font); executeFormat('fontName', font); }}
+              >
+                 {font}
+              </button>
             ))}
           </div>
         )}
@@ -172,32 +180,32 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
 
       {/* Font Size */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('font'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition text-sm font-bold flex items-center gap-1" title="Font Size">
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); togglePopup('font'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition text-sm font-bold flex items-center gap-1" title="Font Size">
           {selectedSize === 'Size' ? <><Type className="w-4 h-4" /> <ChevronDown className="w-3 h-3 ml-1" /></> : <>{selectedSize} <ChevronDown className="w-3 h-3 ml-1" /></>}
         </button>
         {activePopup === 'font' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[120px]">
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Small'); executeFormat('fontSize', '1'); }}>Small</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Normal'); executeFormat('fontSize', '3'); }}>Normal</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Large'); executeFormat('fontSize', '5'); }}>Large</button>
-            <button className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Huge'); executeFormat('fontSize', '7'); }}>Huge</button>
+            <button type="button" className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Small'); executeFormat('fontSize', '1'); }}>Small</button>
+            <button type="button" className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Normal'); executeFormat('fontSize', '3'); }}>Normal</button>
+            <button type="button" className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Large'); executeFormat('fontSize', '5'); }}>Large</button>
+            <button type="button" className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded" onMouseDown={(e) => { e.preventDefault(); setSelectedSize('Huge'); executeFormat('fontSize', '7'); }}>Huge</button>
           </div>
         )}
       </div>
       
       {/* Formatting & Colors */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('bold'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Bold"><Bold className="w-4 h-4" /></button>
-        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('italic'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Italic"><Italic className="w-4 h-4" /></button>
-        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('underline'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Underline"><Underline className="w-4 h-4" /></button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); executeFormat('bold'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Bold"><Bold className="w-4 h-4" /></button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); executeFormat('italic'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Italic"><Italic className="w-4 h-4" /></button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); executeFormat('underline'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Underline"><Underline className="w-4 h-4" /></button>
         
-        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('color'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Text Color"><Palette className="w-4 h-4" /></button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); togglePopup('color'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Text Color"><Palette className="w-4 h-4" /></button>
         {activePopup === 'color' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-3 shadow-2xl flex flex-col gap-3 z-50">
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Text Color</p>
             <div className="grid grid-cols-4 gap-2">
               {colors.map(c => (
-                <button key={c} onMouseDown={(e) => { e.preventDefault(); setActiveColor(c); executeFormat('foreColor', c); }} className="w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition flex items-center justify-center" style={{ backgroundColor: c }}>
+                <button type="button" key={c} onMouseDown={(e) => { e.preventDefault(); setActiveColor(c); executeFormat('foreColor', c); }} className="w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition flex items-center justify-center" style={{ backgroundColor: c }}>
                   {activeColor === c && <Check className={`w-3 h-3 ${c === '#FFFFFF' ? 'text-black' : 'text-white'}`} />}
                 </button>
               ))}
@@ -205,13 +213,13 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
           </div>
         )}
 
-        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('highlight'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Highlight Color"><Highlighter className="w-4 h-4" /></button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); togglePopup('highlight'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Highlight Color"><Highlighter className="w-4 h-4" /></button>
         {activePopup === 'highlight' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-3 shadow-2xl flex flex-col gap-3 z-50">
             <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Highlight Color</p>
             <div className="grid grid-cols-4 gap-2">
               {highlights.map(c => (
-                <button key={c} onMouseDown={(e) => { e.preventDefault(); setActiveBgColor(c); executeFormat('backColor', c); }} className={`w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition flex items-center justify-center`} style={{ backgroundColor: c === 'transparent' ? '#374151' : c }} title={c === 'transparent' ? 'Clear Highlight' : c}>
+                <button type="button" key={c} onMouseDown={(e) => { e.preventDefault(); setActiveBgColor(c); executeFormat('backColor', c); }} className={`w-6 h-6 rounded-full border border-gray-600 shadow-sm hover:scale-110 transition flex items-center justify-center`} style={{ backgroundColor: c === 'transparent' ? '#374151' : c }} title={c === 'transparent' ? 'Clear Highlight' : c}>
                   {activeBgColor === c && <Check className="w-3 h-3 text-black" />}
                 </button>
               ))}
@@ -222,29 +230,29 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
 
       {/* Alignment */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('justifyLeft'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Align Left"><AlignLeft className="w-4 h-4" /></button>
-        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('justifyCenter'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Align Center"><AlignCenter className="w-4 h-4" /></button>
-        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('justifyRight'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Align Right"><AlignRight className="w-4 h-4" /></button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); executeFormat('justifyLeft'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Align Left"><AlignLeft className="w-4 h-4" /></button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); executeFormat('justifyCenter'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Align Center"><AlignCenter className="w-4 h-4" /></button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); executeFormat('justifyRight'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Align Right"><AlignRight className="w-4 h-4" /></button>
       </div>
 
       {/* Lists */}
       <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('insertUnorderedList'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Bullet List"><List className="w-4 h-4" /></button>
-        <button onMouseDown={(e) => { e.preventDefault(); executeFormat('insertOrderedList'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Numbered List"><ListOrdered className="w-4 h-4" /></button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); executeFormat('insertUnorderedList'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Bullet List"><List className="w-4 h-4" /></button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); executeFormat('insertOrderedList'); }} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 transition" title="Numbered List"><ListOrdered className="w-4 h-4" /></button>
       </div>
 
       {/* Advanced Inserts */}
       <div className="flex items-center gap-1 relative">
-        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('math'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><FunctionSquare className="w-4 h-4 text-blue-400" /> Math</button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); togglePopup('math'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><FunctionSquare className="w-4 h-4 text-blue-400" /> Math</button>
         {activePopup === 'math' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[280px]">
             <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Enter LaTeX Equation</label>
             <input autoFocus value={mathInput} onChange={e=>setMathInput(e.target.value)} onKeyDown={(e)=>{ if(e.key==='Enter') { e.preventDefault(); handleMathSubmit(); } }} className="bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" placeholder="e.g. E = mc^2" />
-            <button onMouseDown={(e) => { e.preventDefault(); handleMathSubmit(); }} className="bg-blue-500 text-white text-sm py-2 rounded-lg font-bold">Insert Equation</button>
+            <button type="button" onMouseDown={(e) => { e.preventDefault(); handleMathSubmit(); }} className="bg-blue-500 text-white text-sm py-2 rounded-lg font-bold">Insert Equation</button>
           </div>
         )}
 
-        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('table'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><TableIcon className="w-4 h-4 text-indigo-400" /> Table</button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); togglePopup('table'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><TableIcon className="w-4 h-4 text-indigo-400" /> Table</button>
         {activePopup === 'table' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[220px]">
              <div className="flex justify-between gap-4">
@@ -257,11 +265,11 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
                   <input type="number" min="1" max="10" value={tableCols} onChange={e=>setTableCols(Number(e.target.value))} className="w-full bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" />
                </div>
              </div>
-             <button onMouseDown={(e) => { e.preventDefault(); handleInsertTable(); }} className="bg-indigo-500 text-white text-sm py-2 rounded-lg font-bold mt-2">Insert Table</button>
+             <button type="button" onMouseDown={(e) => { e.preventDefault(); handleInsertTable(); }} className="bg-indigo-500 text-white text-sm py-2 rounded-lg font-bold mt-2">Insert Table</button>
           </div>
         )}
 
-        <button onMouseDown={(e) => { e.preventDefault(); togglePopup('image'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><ImageIcon className="w-4 h-4 text-green-400" /> Image</button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); togglePopup('image'); }} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium transition"><ImageIcon className="w-4 h-4 text-green-400" /> Image</button>
         {activePopup === 'image' && (
           <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[220px]">
             <label className="text-xs text-gray-400 font-bold uppercase tracking-wider">Upload Local Image</label>
@@ -273,8 +281,11 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml }: any) => {
   );
 };
 
-export default function Dashboard() {
+function DashboardContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const setParam = searchParams.get('set');
+
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -343,6 +354,9 @@ export default function Dashboard() {
   const askAudioChunks = useRef<Blob[]>([]);
   const profPlaybackRef = useRef<HTMLAudioElement | null>(null);
 
+  // Editor specific tracker for perfect insertion placement
+  const editorRangeRef = useRef<Range | null>(null);
+
   const loadingTips = [
     'Transmitting documents securely to AI Vision model...',
     'Performing advanced OCR on handwriting...',
@@ -383,6 +397,27 @@ export default function Dashboard() {
     
     return () => unsubscribe();
   }, []);
+
+  // Sync state to URL 
+  useEffect(() => {
+    if (setParam && studyHistory.length > 0 && currentStudySet?.id.toString() !== setParam) {
+      const set = studyHistory.find(s => s.id.toString() === setParam);
+      if (set) {
+        loadStudySet(set, false); // Don't push to history since we read it from URL
+      }
+    }
+  }, [setParam, studyHistory, currentStudySet]);
+
+  const handleEditorSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      const editor = document.getElementById('active-pro-editor');
+      if (editor && editor.contains(range.commonAncestorContainer)) {
+        editorRangeRef.current = range;
+      }
+    }
+  };
 
   // --- Folder Management ---
   const saveStatsAndFolders = async (newStats: UserStats, newFolders: Folder[]) => {
@@ -488,6 +523,11 @@ export default function Dashboard() {
       try {
         await deleteDoc(doc(db, 'profiles', user.uid, 'study_sets', setId.toString()));
       } catch(err) { console.error('Error deleting from cloud', err); }
+    }
+
+    if (currentStudySet?.id === setId) {
+        setCurrentView('dashboard');
+        window.history.pushState(null, '', '/dashboard/');
     }
   };
 
@@ -764,13 +804,17 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
   };
   // -------------------------
 
-  const loadStudySet = (studySet: StudySet) => {
+  const loadStudySet = (studySet: StudySet, updateUrl = true) => {
     setCurrentStudySet(studySet);
     setIsEditing(false);
     setAudioUrl(null);
     setChatMessages([{ role: 'ai', text: `Hi! I've analyzed <b>${studySet.title}</b>. How can I help?` }]);
     setCurrentView('study');
     setCurrentTab('notes');
+
+    if (updateUrl) {
+        window.history.pushState(null, '', `?set=${studySet.id}`);
+    }
   };
 
   const translateNotes = async () => {
@@ -1198,10 +1242,10 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       
       <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
         <div className="px-2 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Workspace</div>
-        <button onClick={() => { setCurrentView('dashboard'); setSidebarOpen(false); }} className={`w-full text-left sidebar-item ${currentView === 'dashboard' ? 'active' : ''}`}>
+        <button onClick={() => { setCurrentView('dashboard'); setSidebarOpen(false); window.history.pushState(null, '', '/dashboard/'); }} className={`w-full text-left sidebar-item ${currentView === 'dashboard' ? 'active' : ''}`}>
           <LayoutDashboard className="w-5 h-5" /> Dashboard
         </button>
-        <button onClick={() => { setCurrentView('create'); setSidebarOpen(false); }} className={`w-full text-left sidebar-item ${currentView === 'create' ? 'active' : ''}`}>
+        <button onClick={() => { setCurrentView('create'); setSidebarOpen(false); window.history.pushState(null, '', '/dashboard/'); }} className={`w-full text-left sidebar-item ${currentView === 'create' ? 'active' : ''}`}>
           <PlusCircle className="w-5 h-5" /> Create Notes
         </button>
         <Link href="/exam/" className="w-full text-left sidebar-item flex items-center gap-3">
@@ -1426,7 +1470,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         {currentView === 'study' && currentStudySet && (
           <div className="p-4 md:p-8 max-w-6xl mx-auto pb-32 pt-6 md:pt-10 relative">
             <div className="mb-6 flex justify-between items-center">
-              <button onClick={() => setCurrentView('dashboard')} className="text-gray-400 hover:text-white transition flex items-center gap-2 text-sm font-medium"><ArrowLeft className="w-4 h-4" /> Back</button>
+              <button onClick={() => { setCurrentView('dashboard'); window.history.pushState(null, '', '/dashboard/'); }} className="text-gray-400 hover:text-white transition flex items-center gap-2 text-sm font-medium"><ArrowLeft className="w-4 h-4" /> Back</button>
             </div>
             
             <div className="glass-card bg-gray-800/50 backdrop-blur-lg border-gray-700 relative overflow-visible">
@@ -1482,6 +1526,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                       <NoteEditorToolbar 
                          onFormat={(cmd: string, val: string) => document.execCommand(cmd, false, val)} 
                          onInsertHtml={(html: string) => document.execCommand('insertHTML', false, html)}
+                         editorRangeRef={editorRangeRef}
                       />
                     )}
 
@@ -1490,7 +1535,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                         <div className="bg-green-900/10 p-6 md:p-8 rounded-[24px] border-2 border-dashed border-green-500/40 relative"><div className="absolute top-0 right-0 bg-green-500/20 text-green-400 text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-[24px] uppercase tracking-wider">Editing Summary</div><div className="prose prose-lg max-w-none text-gray-200 focus:outline-none min-h-[100px] note-editor-content" contentEditable suppressContentEditableWarning onBlur={(e) => setEditedSummary(e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: editedSummary }} /></div>
                         <div className="bg-blue-900/10 p-6 md:p-8 rounded-[24px] border-2 border-dashed border-blue-500/40 relative">
                           <div className="absolute top-0 right-0 bg-blue-500/20 text-blue-400 text-[10px] font-bold px-3 py-1 rounded-bl-xl rounded-tr-[24px] uppercase tracking-wider">Editing Notes</div>
-                          <div id="active-pro-editor" className="prose prose-lg max-w-none text-gray-200 focus:outline-none min-h-[400px] note-editor-content" contentEditable suppressContentEditableWarning onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: editedNotes }} />
+                          <div id="active-pro-editor" className="prose prose-lg max-w-none text-gray-200 focus:outline-none min-h-[400px] note-editor-content" contentEditable suppressContentEditableWarning onMouseUp={handleEditorSelection} onKeyUp={handleEditorSelection} onBlur={(e) => setEditedNotes(e.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: editedNotes }} />
                         </div>
                       </div>
                     ) : (
@@ -1786,5 +1831,13 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         </div>
       )}
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0F172A] flex items-center justify-center text-white font-bold">Loading Dashboard...</div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
