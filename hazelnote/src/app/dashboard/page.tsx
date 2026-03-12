@@ -1,1190 +1,1137 @@
 'use client';
 
-import { Suspense, useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  LayoutDashboard, PlusCircle, ClipboardList, UserCircle, HelpCircle, Menu, X, Flame,
-  FileCheck2, Sparkles, FileUp, Mic, Link as LinkIcon, FileText, ArrowLeft, Printer,
-  Languages, Send, CheckCircle, Trash2, Wand2, Play, Square, Headphones, Bold, Italic,
-  Underline, Type, ImageIcon, FunctionSquare, Palette, Save, RefreshCw, FastForward,
-  Rewind, MessageCircleQuestion, Highlighter, Table as TableIcon, StopCircle, ChevronDown,
-  Edit2, FolderPlus, Network, Paperclip, Check, List, ListOrdered, AlignLeft, AlignCenter,
-  AlignRight,
+  LayoutDashboard, PlusCircle, ClipboardList, UserCircle, HelpCircle,
+  Menu, X, Send, Paperclip, Sparkles, RefreshCw, AlertCircle,
+  Wand2, ChevronRight, ChevronDown, Folder, FolderPlus, FolderOpen,
+  Trash2, Edit2, ArrowLeft, Printer, Languages, MessageCircleQuestion,
+  Headphones, Play, Square, Rewind, FastForward, Mic, Save, Type,
+  FileUp, LinkIcon, Network, CheckCircle, XCircle, BookOpen,
+  BarChart2, Star, StopCircle, GripVertical
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { StudySet, UserStats, Folder } from '@/types';
-import { safeParseJSON, saveToStorage, renderMarkdownWithMath, getCurrentMonth, pcmToWav, base64ToArrayBuffer } from '@/lib/utils';
-import katex from 'katex';
+import { safeParseJSON, renderMarkdownWithMath } from '@/lib/utils';
 
-const NoteEditorToolbar = ({ onFormat, onInsertHtml, editorRangeRef }: any) => {
-  const [activePopup, setActivePopup] = useState<string | null>(null);
-  const [mathInput, setMathInput] = useState('');
-  const [tableRows, setTableRows] = useState(3);
-  const [tableCols, setTableCols] = useState(3);
-  const [activeColor, setActiveColor] = useState<string | null>(null);
-  const [activeBgColor, setActiveBgColor] = useState<string | null>(null);
-  const [selectedFont, setSelectedFont] = useState('Font');
-  const [selectedSize, setSelectedSize] = useState('Size');
+// ── Types ─────────────────────────────────────────────────────────────────────
+type StudySet = {
+  id: number;
+  title: string;
+  parts: string[];
+  createdAt: string;
+  folderId?: number | null;
+};
 
-  const colors = ['#000000','#FFFFFF','#EF4444','#22C55E','#3B82F6','#F59E0B','#A855F7','#EC4899'];
-  const highlights = ['transparent','#FEF08A','#BBF7D0','#BFDBFE','#FBCFE8','#FED7AA','#E9D5FF'];
-  const fonts = ['Arial','Times New Roman','Courier New','Georgia','Verdana','Inter','Roboto','Open Sans','Lora','Playfair Display'];
+type Folder = {
+  id: number;
+  name: string;
+  emoji: string;
+};
 
-  const restoreSelection = () => {
-    if (!editorRangeRef?.current) return;
-    try {
-      const editor = document.getElementById('active-pro-editor');
-      if (editor && document.activeElement !== editor) editor.focus();
-      const sel = window.getSelection();
-      if (sel) { sel.removeAllRanges(); sel.addRange(editorRangeRef.current.cloneRange()); }
-    } catch (e) {}
-  };
+type ChatMsg = { role: 'user' | 'ai'; text: string };
 
-  const togglePopup = (tool: string) => setActivePopup(activePopup === tool ? null : tool);
+type Stats = {
+  totalSets: number;
+  streakDays: number;
+  monthlySets: Record<string, number>;
+};
 
-  const executeFormat = (cmd: string, val?: string) => {
-    restoreSelection();
-    if (cmd === 'fontName') {
-      // styleWithCSS makes execCommand write inline style instead of deprecated <font face>
-      try { document.execCommand('styleWithCSS', false, 'true'); } catch (e) {}
+// ── Daily message usage helpers ───────────────────────────────────────────────
+function getDailyMsgCount(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const stored = localStorage.getItem('hz_chat_usage');
+    if (!stored) return 0;
+    const data = JSON.parse(stored);
+    if (data.date !== new Date().toDateString()) return 0;
+    return data.count || 0;
+  } catch { return 0; }
+}
+
+function incrementDailyMsgCount(): void {
+  if (typeof window === 'undefined') return;
+  const today = new Date().toDateString();
+  const count = getDailyMsgCount();
+  localStorage.setItem('hz_chat_usage', JSON.stringify({ date: today, count: count + 1 }));
+}
+
+function getCurrentMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}`;
+}
+
+// ── Subcomponents ─────────────────────────────────────────────────────────────
+function NoteEditorToolbar({ onFormat, onInsertHtml, editorRangeRef }: {
+  onFormat: (cmd: string, val: string) => void;
+  onInsertHtml: (html: string) => void;
+  editorRangeRef: React.MutableRefObject<Range | null>;
+}) {
+  const exec = (cmd: string, val = '') => {
+    const sel = window.getSelection();
+    if (editorRangeRef.current && sel) {
+      sel.removeAllRanges();
+      sel.addRange(editorRangeRef.current);
     }
-    onFormat(cmd, val);
-    setActivePopup(null);
+    document.execCommand(cmd, false, val);
   };
-
-  const handleMathSubmit = () => {
-    restoreSelection();
-    try {
-      const html = katex.renderToString(mathInput, { throwOnError: false });
-      onInsertHtml(`&nbsp;<span class="inline-math" contenteditable="false" data-tex="${mathInput}" style="display:inline-block;padding:2px 4px;border:1px dashed transparent;border-radius:4px;">${html}</span>&nbsp;`);
-    } catch {
-      onFormat('insertText', ` $${mathInput}$ `);
-    }
-    setMathInput('');
-    setActivePopup(null);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        restoreSelection();
-        onInsertHtml(
-          `<div style="display:inline-block;resize:both;overflow:hidden;width:300px;min-width:60px;min-height:40px;border:2px dashed #4b5563;padding:2px;margin:0.5rem;max-width:100%;vertical-align:top;"><img src="${ev.target?.result}" style="width:100%;height:100%;object-fit:contain;display:block;" alt="Uploaded Image" /></div>`
-        );
-        setActivePopup(null);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleInsertTable = () => {
-    restoreSelection();
-    let html = `<div style="display:block;margin:1rem 0;overflow:auto;width:100%;border:1px dashed #4b5563;border-radius:8px;resize:both;"><table style="width:100%;border-collapse:collapse;"><tbody>`;
-    for (let i = 0; i < tableRows; i++) {
-      html += '<tr>';
-      for (let j = 0; j < tableCols; j++) html += `<td style="border:1px solid #4b5563;padding:8px 12px;min-width:50px;"><br></td>`;
-      html += '</tr>';
-    }
-    html += '</tbody></table></div><p><br></p>';
-    onInsertHtml(html);
-    setActivePopup(null);
-  };
-
   return (
-    <div className="sticky top-20 z-[60] bg-gray-900/95 backdrop-blur-md border border-gray-700 p-2 flex flex-wrap items-center gap-2 shadow-2xl rounded-2xl mb-6"
-      onMouseDown={(e) => { if (e.target instanceof HTMLInputElement) return; e.preventDefault(); }}>
-
-      {/* Font Family */}
-      <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();togglePopup('fontFamily');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 text-sm font-bold flex items-center gap-1">
-          {selectedFont} <ChevronDown className="w-3 h-3"/>
+    <div className="flex flex-wrap gap-1 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 mb-3">
+      {[
+        { label: 'B', cmd: 'bold', title: 'Bold' },
+        { label: 'I', cmd: 'italic', title: 'Italic' },
+        { label: 'U', cmd: 'underline', title: 'Underline' },
+        { label: 'S', cmd: 'strikeThrough', title: 'Strike' },
+      ].map(({ label, cmd, title }) => (
+        <button key={cmd} onMouseDown={e => { e.preventDefault(); exec(cmd); }}
+          className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-sm font-bold transition" title={title}>
+          {label}
         </button>
-        {activePopup==='fontFamily' && (
-          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[160px] max-h-64 overflow-y-auto">
-            {fonts.map(font=>(
-              <button key={font} type="button" style={{fontFamily:font}} className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded"
-                onMouseDown={(e)=>{e.preventDefault();setSelectedFont(font);executeFormat('fontName',font);}}>
-                {font}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Font Size */}
-      <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();togglePopup('font');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300 text-sm font-bold flex items-center gap-1">
-          {selectedSize==='Size'?<><Type className="w-4 h-4"/><ChevronDown className="w-3 h-3 ml-1"/></>:<>{selectedSize}<ChevronDown className="w-3 h-3 ml-1"/></>}
+      ))}
+      <div className="w-px bg-gray-700 mx-1"/>
+      {(['1','2','3'] as const).map(h => (
+        <button key={h} onMouseDown={e => { e.preventDefault(); exec('formatBlock', `h${h}`); }}
+          className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold transition">
+          H{h}
         </button>
-        {activePopup==='font' && (
-          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-2 shadow-2xl flex flex-col gap-1 z-50 min-w-[120px]">
-            {[['Small','1'],['Normal','3'],['Large','5'],['Huge','7']].map(([label,val])=>(
-              <button key={label} type="button" className="text-sm text-left px-3 py-1.5 hover:bg-gray-700 text-gray-300 rounded"
-                onMouseDown={(e)=>{e.preventDefault();setSelectedSize(label);executeFormat('fontSize',val);}}>{label}</button>
-            ))}
+      ))}
+      <div className="w-px bg-gray-700 mx-1"/>
+      <button onMouseDown={e => { e.preventDefault(); exec('insertUnorderedList'); }}
+        className="px-2 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold transition">• List</button>
+      <button onMouseDown={e => { e.preventDefault(); exec('insertOrderedList'); }}
+        className="px-2 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold transition">1. List</button>
+      <button onMouseDown={e => { e.preventDefault(); onInsertHtml('<hr style="border-color:#374151;margin:1rem 0"/>'); }}
+        className="px-2 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold transition">─ Divider</button>
+    </div>
+  );
+}
+
+function FlashcardsViewer({ text }: { text: string }) {
+  const [idx, setIdx] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+  const cards = text.split('\n').filter(l => l.includes('|')).map(l => { const [q, a] = l.split('|'); return { q: q?.replace(/^Q:/i,'').trim(), a: a?.trim() }; }).filter(c => c.q && c.a);
+  if (!cards.length) return <p className="text-gray-500 text-center py-10">No flashcards generated.</p>;
+  const card = cards[idx];
+  return (
+    <div className="max-w-xl mx-auto text-center">
+      <p className="text-gray-400 text-sm font-bold mb-6">{idx + 1} / {cards.length}</p>
+      <div className="cursor-pointer perspective-1000" onClick={() => setFlipped(!flipped)}>
+        <div className={`relative w-full min-h-[200px] transition-transform duration-500 transform-style-3d ${flipped ? 'rotate-y-180' : ''}`}>
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-700 border border-gray-600 rounded-[24px] p-8 flex items-center justify-center backface-hidden">
+            <p className="text-xl font-bold text-white">{card.q}</p>
           </div>
-        )}
+          <div className="absolute inset-0 bg-gradient-to-br from-green-900 to-emerald-800 border border-green-600 rounded-[24px] p-8 flex items-center justify-center backface-hidden rotate-y-180">
+            <p className="text-xl text-green-100">{card.a}</p>
+          </div>
+        </div>
       </div>
-
-      {/* Formatting & Colors */}
-      <div className="flex items-center gap-1 border-r border-gray-700 pr-2 relative">
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();executeFormat('bold');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300" title="Bold"><Bold className="w-4 h-4"/></button>
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();executeFormat('italic');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300" title="Italic"><Italic className="w-4 h-4"/></button>
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();executeFormat('underline');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300" title="Underline"><Underline className="w-4 h-4"/></button>
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();togglePopup('color');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300" title="Text Color"><Palette className="w-4 h-4"/></button>
-        {activePopup==='color' && (
-          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-3 shadow-2xl flex flex-col gap-3 z-50">
-            <p className="text-xs text-gray-400 font-bold uppercase">Text Color</p>
-            <div className="grid grid-cols-4 gap-2">
-              {colors.map(c=>(
-                <button type="button" key={c} onMouseDown={(e)=>{e.preventDefault();setActiveColor(c);executeFormat('foreColor',c);}}
-                  className="w-6 h-6 rounded-full border border-gray-600 hover:scale-110 transition flex items-center justify-center" style={{backgroundColor:c}}>
-                  {activeColor===c && <Check className={`w-3 h-3 ${c==='#FFFFFF'?'text-black':'text-white'}`}/>}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();togglePopup('highlight');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300" title="Highlight"><Highlighter className="w-4 h-4"/></button>
-        {activePopup==='highlight' && (
-          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-3 shadow-2xl flex flex-col gap-3 z-50">
-            <p className="text-xs text-gray-400 font-bold uppercase">Highlight Color</p>
-            <div className="grid grid-cols-4 gap-2">
-              {highlights.map(c=>(
-                <button type="button" key={c} onMouseDown={(e)=>{e.preventDefault();setActiveBgColor(c);executeFormat('backColor',c);}}
-                  className="w-6 h-6 rounded-full border border-gray-600 hover:scale-110 transition flex items-center justify-center"
-                  style={{backgroundColor:c==='transparent'?'#374151':c}}>
-                  {activeBgColor===c && <Check className="w-3 h-3 text-black"/>}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Alignment */}
-      <div className="flex items-center gap-1 border-r border-gray-700 pr-2">
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();executeFormat('justifyLeft');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300"><AlignLeft className="w-4 h-4"/></button>
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();executeFormat('justifyCenter');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300"><AlignCenter className="w-4 h-4"/></button>
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();executeFormat('justifyRight');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300"><AlignRight className="w-4 h-4"/></button>
-      </div>
-
-      {/* Lists */}
-      <div className="flex items-center gap-1 border-r border-gray-700 pr-2">
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();executeFormat('insertUnorderedList');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300"><List className="w-4 h-4"/></button>
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();executeFormat('insertOrderedList');}} className="p-1.5 hover:bg-gray-700 rounded text-gray-300"><ListOrdered className="w-4 h-4"/></button>
-      </div>
-
-      {/* Advanced Inserts */}
-      <div className="flex items-center gap-1 relative">
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();togglePopup('math');}} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium"><FunctionSquare className="w-4 h-4 text-blue-400"/> Math</button>
-        {activePopup==='math' && (
-          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[280px]">
-            <label className="text-xs text-gray-400 font-bold uppercase">Enter LaTeX Equation</label>
-            <input autoFocus value={mathInput} onChange={e=>setMathInput(e.target.value)}
-              onKeyDown={(e)=>{if(e.key==='Enter'){e.preventDefault();handleMathSubmit();}}}
-              className="bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600 focus:outline-none focus:border-blue-500" placeholder="e.g. E = mc^2"/>
-            <button type="button" onMouseDown={(e)=>{e.preventDefault();handleMathSubmit();}} className="bg-blue-500 text-white text-sm py-2 rounded-lg font-bold">Insert Equation</button>
-          </div>
-        )}
-
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();togglePopup('table');}} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium"><TableIcon className="w-4 h-4 text-indigo-400"/> Table</button>
-        {activePopup==='table' && (
-          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[220px]">
-            <div className="flex justify-between gap-4">
-              <div><label className="text-xs text-gray-400 font-bold uppercase block mb-1">Rows</label>
-                <input type="number" min="1" max="10" value={tableRows} onChange={e=>setTableRows(Number(e.target.value))} className="w-full bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600"/></div>
-              <div><label className="text-xs text-gray-400 font-bold uppercase block mb-1">Cols</label>
-                <input type="number" min="1" max="10" value={tableCols} onChange={e=>setTableCols(Number(e.target.value))} className="w-full bg-gray-700 text-white px-3 py-2 text-sm rounded border border-gray-600"/></div>
-            </div>
-            <button type="button" onMouseDown={(e)=>{e.preventDefault();handleInsertTable();}} className="bg-indigo-500 text-white text-sm py-2 rounded-lg font-bold mt-2">Insert Table</button>
-          </div>
-        )}
-
-        <button type="button" onMouseDown={(e)=>{e.preventDefault();togglePopup('image');}} className="p-1.5 hover:bg-gray-700 rounded flex items-center gap-1 text-sm text-gray-300 font-medium"><ImageIcon className="w-4 h-4 text-green-400"/> Image</button>
-        {activePopup==='image' && (
-          <div className="absolute top-full mt-2 left-0 bg-gray-800 border border-gray-600 rounded-xl p-4 shadow-2xl flex flex-col gap-3 z-50 min-w-[220px]">
-            <label className="text-xs text-gray-400 font-bold uppercase">Upload Local Image</label>
-            <input type="file" accept="image/*" onChange={handleImageUpload} className="text-sm text-gray-300 w-full file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-500 file:text-white hover:file:bg-green-600"/>
-          </div>
-        )}
+      <p className="text-gray-500 text-xs mt-4 mb-8">Click card to reveal answer</p>
+      <div className="flex justify-center gap-4">
+        <button disabled={idx===0} onClick={() => { setIdx(idx-1); setFlipped(false); }} className="px-6 py-2.5 bg-gray-700 text-white rounded-xl font-bold disabled:opacity-30 hover:bg-gray-600 transition">← Prev</button>
+        <button disabled={idx===cards.length-1} onClick={() => { setIdx(idx+1); setFlipped(false); }} className="px-6 py-2.5 bg-gray-700 text-white rounded-xl font-bold disabled:opacity-30 hover:bg-gray-600 transition">Next →</button>
       </div>
     </div>
   );
-};
+}
 
+function QuizViewer({ text }: { text: string }) {
+  const questions = text.split(/\n(?=\d+\.)/).map(block => {
+    const lines = block.trim().split('\n');
+    const q = lines[0].replace(/^\d+\.\s*/, '');
+    const opts = lines.slice(1).filter(l => /^[A-D]\)/.test(l));
+    const ansLine = lines.find(l => /^Answer:/i.test(l));
+    const ans = ansLine?.replace(/^Answer:\s*/i,'').trim().charAt(0).toUpperCase();
+    return { q, opts, ans };
+  }).filter(q => q.q && q.opts.length);
+  const [selected, setSelected] = useState<Record<number, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+  if (!questions.length) return <p className="text-gray-500 text-center py-10">No quiz questions generated.</p>;
+  const score = submitted ? questions.filter((q,i) => selected[i] === q.ans).length : 0;
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto">
+      {!submitted ? (
+        <>
+          {questions.map((q, i) => (
+            <div key={i} className="bg-gray-800 border border-gray-700 rounded-2xl p-6">
+              <p className="text-white font-bold mb-4">{i+1}. {q.q}</p>
+              <div className="space-y-2">
+                {q.opts.map((opt, j) => {
+                  const letter = opt.charAt(0);
+                  return (
+                    <label key={j} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition ${selected[i]===letter ? 'border-green-500 bg-green-900/20' : 'border-gray-600 hover:border-gray-500 bg-gray-700/30'}`}>
+                      <input type="radio" name={`q${i}`} value={letter} checked={selected[i]===letter} onChange={() => setSelected({...selected,[i]:letter})} className="hidden"/>
+                      <span className={`w-7 h-7 rounded-full border-2 flex items-center justify-center font-bold text-sm flex-shrink-0 ${selected[i]===letter ? 'border-green-500 bg-green-500 text-white' : 'border-gray-500 text-gray-400'}`}>{letter}</span>
+                      <span className="text-gray-200 text-sm">{opt.replace(/^[A-D]\)\s*/,'')}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <button onClick={() => setSubmitted(true)} disabled={Object.keys(selected).length < questions.length} className="w-full py-4 bg-green-500 text-white rounded-xl font-bold text-lg hover:bg-green-600 transition disabled:opacity-40">Submit Quiz</button>
+        </>
+      ) : (
+        <div>
+          <div className="text-center mb-8 p-6 bg-gray-800 rounded-2xl border border-gray-700">
+            <p className="text-4xl font-extrabold text-white mb-1">{score}/{questions.length}</p>
+            <p className="text-gray-400">{score===questions.length?'Perfect!':score>=questions.length*0.7?'Well done!':'Keep practicing!'}</p>
+          </div>
+          {questions.map((q,i) => (
+            <div key={i} className={`mb-4 p-5 rounded-2xl border ${selected[i]===q.ans ? 'border-green-700 bg-green-900/10' : 'border-red-700 bg-red-900/10'}`}>
+              <div className="flex items-start gap-2 mb-2">
+                {selected[i]===q.ans ? <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5"/> : <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5"/>}
+                <p className="text-white font-bold text-sm">{q.q}</p>
+              </div>
+              {selected[i]!==q.ans && <p className="text-sm text-red-300 ml-7">Your answer: {selected[i]} · Correct: {q.ans}</p>}
+            </div>
+          ))}
+          <button onClick={() => { setSelected({}); setSubmitted(false); }} className="w-full py-4 bg-gray-700 text-white rounded-xl font-bold hover:bg-gray-600 transition">Retake Quiz</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Voice languages ────────────────────────────────────────────────────────────
+const VOICE_LANGUAGES = [
+  'Auto-detect','English','Urdu','Arabic','French','Spanish','German',
+  'Hindi','Chinese (Mandarin)','Japanese','Korean','Portuguese','Italian',
+  'Russian','Turkish','Bengali',
+];
+
+// ── Main component ─────────────────────────────────────────────────────────────
 function DashboardContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const setParam = searchParams.get('set');
-
+  // Auth / tier
   const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [tier, setTier] = useState<'free' | 'pro'>('free');
+
+  // Layout
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'dashboard'|'create'|'study'>('dashboard');
   const [currentTab, setCurrentTab] = useState<'notes'|'flashcards'|'quiz'|'podcast'>('notes');
-  const [inputMode, setInputMode] = useState<'pdf'|'voice'|'link'>('pdf');
 
+  // Study data
+  const [studyHistory, setStudyHistory] = useState<StudySet[]>([]);
+  const [currentStudySet, setCurrentStudySet] = useState<StudySet | null>(null);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState<number|null>(null);
+  const [stats, setStats] = useState<Stats>({ totalSets: 0, streakDays: 0, monthlySets: {} });
+
+  // Input / create
+  const [inputMode, setInputMode] = useState<'text'|'pdf'|'voice'|'link'>('text');
+  const [inputText, setInputText] = useState('');
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
-  const [voiceText, setVoiceText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const [loadingTip, setLoadingTip] = useState('Analyzing document structure...');
-  // Background generation state (Pro)
+  const [loadingTip, setLoadingTip] = useState('');
   const [bgGenActive, setBgGenActive] = useState(false);
-  const [bgGenDone, setBgGenDone] = useState(false);
 
-  const [currentStudySet, setCurrentStudySet] = useState<StudySet|null>(null);
-  const [studyHistory, setStudyHistory] = useState<StudySet[]>([]);
-  const [stats, setStats] = useState<UserStats>({streak:0,notes:0,lastDate:null,monthlySets:{}});
-  const [folders, setFolders] = useState<Folder[]>([]);
-  const [activeFilterFolder, setActiveFilterFolder] = useState<string|null>(null);
-  const [folderDropdownOpen, setFolderDropdownOpen] = useState(false);
-  const [folderModal, setFolderModal] = useState<{isOpen:boolean;type:'create'|'edit';folderId?:string;name:string;emoji:string}>({isOpen:false,type:'create',name:'',emoji:'📁'});
+  // Notes editing
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedSummary, setEditedSummary] = useState('');
+  const [editedNotes, setEditedNotes] = useState('');
+  const editorRangeRef = useRef<Range | null>(null);
 
+  // Add context
   const [addContextModalOpen, setAddContextModalOpen] = useState(false);
-  const [contextInputMode, setContextInputMode] = useState<'pdf'|'voice'|'link'>('pdf');
+  const [contextInputMode, setContextInputMode] = useState<'pdf'|'voice'|'link'>('voice');
   const [contextPdfFiles, setContextPdfFiles] = useState<File[]>([]);
   const [contextVoiceText, setContextVoiceText] = useState('');
   const [isAddingContextLoading, setIsAddingContextLoading] = useState(false);
 
-  const [tier, setTier] = useState<'free'|'pro'>('free');
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState<{role:'user'|'ai';text:string}[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatFile, setChatFile] = useState<File|null>(null);
-
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedNotes, setEditedNotes] = useState('');
-  const [editedSummary, setEditedSummary] = useState('');
-  const [syncStatus, setSyncStatus] = useState<'synced'|'syncing'|'offline'>('offline');
+  // Translate
   const [translateModalOpen, setTranslateModalOpen] = useState(false);
   const [translateProgress, setTranslateProgress] = useState(-1);
-  const [goProModalOpen, setGoProModalOpen] = useState(false);
-  const [isGeneratingExtra, setIsGeneratingExtra] = useState(false);
 
-  // Podcast
-  const [audioUrl, setAudioUrl] = useState<string|null>(null);
-  const [isAudioLoading, setIsAudioLoading] = useState(false);
-  const [podcastProgress, setPodcastProgress] = useState(0);
+  // Podcast / audio
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const audioRef = useRef<HTMLAudioElement|null>(null);
+  const [podcastProgress, setPodcastProgress] = useState(0);
+  const [playbackRate, setPlaybackRate] = useState<0.5|1|1.5>(1);
+  const audioUrlMapRef = useRef<Record<number, string>>({});
 
-  // Ask Professor
+  // Ask Prof modal (audio Q&A)
   const [askModalOpen, setAskModalOpen] = useState(false);
   const isAskModalOpenRef = useRef(false);
   const [isAskRecording, setIsAskRecording] = useState(false);
   const [askResponse, setAskResponse] = useState('');
   const [isProfSpeaking, setIsProfSpeaking] = useState(false);
-  const askMediaRecorder = useRef<MediaRecorder|null>(null);
-  const askAudioChunks = useRef<Blob[]>([]);
-  const profPlaybackRef = useRef<HTMLAudioElement|null>(null);
+  const askMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const askChunksRef = useRef<Blob[]>([]);
+  const profAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const editorRangeRef = useRef<Range|null>(null);
+  // Chat
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([{
+    role: 'ai',
+    text: `<b>Hi! I'm Professor Hazel.</b><br/>Ask me anything about this study set — definitions, examples, exam tips. What would you like to know?`,
+  }]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatFile, setChatFile] = useState<File | null>(null);
+  const [dailyMsgCount, setDailyMsgCount] = useState(0);
 
-  const loadingTips = [
-    'Transmitting documents securely to AI Vision model...',
-    'Performing advanced OCR on handwriting...',
-    'Synthesizing documents into structured notes...',
-    'Formatting Markdown tables...',
-    'Formulating intelligent practice questions...',
-    'Structuring audio podcast script...',
-  ];
+  // Folder modal
+  const [folderModal, setFolderModal] = useState<{
+    isOpen: boolean; type: 'create'|'edit'; name: string; emoji: string; folderId?: number;
+  }>({ isOpen: false, type: 'create', name: '', emoji: '📁' });
 
+  // Modals
+  const [goProModalOpen, setGoProModalOpen] = useState(false);
+
+  // Voice recording
+  const [voiceLang, setVoiceLang] = useState('Auto-detect');
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const [isVoiceTranscribing, setIsVoiceTranscribing] = useState(false);
+  const [voiceText, setVoiceText] = useState('');
+  const voiceMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+
+  const dailyLimit = tier === 'pro' ? 10 : 2;
+
+  // ── Firebase sync ──────────────────────────────────────────────────────────
+  const syncToFirebase = useCallback(async (set: StudySet) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'study_sets', `${user.uid}_${set.id}`), { ...set, userId: user.uid }, { merge: true });
+    } catch (e) { console.error('Sync error', e); }
+  }, [user]);
+
+  // ── Load data ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
-        const snap = await getDoc(doc(db,'profiles',u.uid));
+        const snap = await getDoc(doc(db, 'profiles', u.uid));
         if (snap.exists()) {
           const p = snap.data();
-          setProfile(p);
-          setTier(p.is_pro?'pro':'free');
-          if (p.stats) { setStats(p.stats); saveToStorage('hz_stats',p.stats); }
-          if (p.folders) { setFolders(p.folders); saveToStorage('hz_folders',p.folders); }
-          if (p.is_pro) syncFromFirebase(u.uid);
+          setTier(p.is_pro ? 'pro' : 'free');
         }
       }
     });
-    setStudyHistory(safeParseJSON('hz_study_history',[]));
-    setStats(safeParseJSON('hz_stats',{streak:0,notes:0,lastDate:null,monthlySets:{}}));
-    setFolders(safeParseJSON('hz_folders',[]));
-    return () => unsubscribe();
+    // Load local data
+    try {
+      const saved = localStorage.getItem('hz_study_sets');
+      if (saved) setStudyHistory(JSON.parse(saved));
+      const savedFolders = localStorage.getItem('hz_folders');
+      if (savedFolders) setFolders(JSON.parse(savedFolders));
+      const savedStats = localStorage.getItem('hz_stats');
+      if (savedStats) setStats(JSON.parse(savedStats));
+    } catch {}
+    setDailyMsgCount(getDailyMsgCount());
+    return () => unsub();
   }, []);
 
-  useEffect(() => {
-    if (setParam && studyHistory.length>0 && currentStudySet?.id.toString()!==setParam) {
-      const set = studyHistory.find(s=>s.id.toString()===setParam);
-      if (set) loadStudySet(set,false);
-    }
-  }, [setParam,studyHistory,currentStudySet]);
+  const saveStudyHistory = useCallback((sets: StudySet[]) => {
+    setStudyHistory(sets);
+    localStorage.setItem('hz_study_sets', JSON.stringify(sets));
+  }, []);
 
-  // Sync playback rate to audio element
-  useEffect(() => {
-    if (audioRef.current) audioRef.current.playbackRate = playbackRate;
-  }, [playbackRate]);
+  const saveFolders = useCallback((f: Folder[]) => {
+    setFolders(f);
+    localStorage.setItem('hz_folders', JSON.stringify(f));
+  }, []);
 
-  const handleEditorSelection = () => {
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount>0) {
-      const range = sel.getRangeAt(0);
-      const editor = document.getElementById('active-pro-editor');
-      if (editor && editor.contains(range.commonAncestorContainer))
-        editorRangeRef.current = range.cloneRange();
-    }
-  };
+  const updateStats = useCallback((sets: StudySet[]) => {
+    const newStats = { ...stats, totalSets: sets.length };
+    const month = getCurrentMonth();
+    newStats.monthlySets = { ...newStats.monthlySets, [month]: (newStats.monthlySets[month] || 0) };
+    setStats(newStats);
+    localStorage.setItem('hz_stats', JSON.stringify(newStats));
+  }, [stats]);
 
-  // --- Folders ---
-  const saveStatsAndFolders = async (newStats:UserStats, newFolders:Folder[]) => {
-    setStats(newStats); setFolders(newFolders);
-    saveToStorage('hz_stats',newStats); saveToStorage('hz_folders',newFolders);
-    if (user) { try { await updateDoc(doc(db,'profiles',user.uid),{stats:newStats,folders:newFolders}); } catch(e){} }
-  };
-
-  const handleSaveFolder = () => {
-    if (!folderModal.name.trim()) return alert('Folder name cannot be empty.');
-    let newFolders = [...folders];
-    if (folderModal.type==='create') newFolders.push({id:Date.now().toString(),name:folderModal.name,emoji:folderModal.emoji||'📁'});
-    else if (folderModal.type==='edit'&&folderModal.folderId) newFolders = newFolders.map(f=>f.id===folderModal.folderId?{...f,name:folderModal.name,emoji:folderModal.emoji}:f);
-    saveStatsAndFolders(stats,newFolders);
-    setFolderModal({isOpen:false,type:'create',name:'',emoji:'📁'});
-  };
-
-  const deleteFolder = (id:string) => {
-    if (!confirm('Delete this folder? Study sets inside remain safe but uncategorized.')) return;
-    saveStatsAndFolders(stats,folders.filter(f=>f.id!==id));
-    if (activeFilterFolder===id) setActiveFilterFolder(null);
-  };
-
-  const openFolderModal = (type:'create'|'edit', folder?:Folder) => {
-    setFolderDropdownOpen(false);
-    if (type==='create') setFolderModal({isOpen:true,type,name:'',emoji:'📁'});
-    else if (type==='edit'&&folder) setFolderModal({isOpen:true,type,folderId:folder.id,name:folder.name,emoji:folder.emoji});
-  };
-
-  const assignFolderToSet = (setId:number,folderId:string) => {
-    const newHistory = studyHistory.map(s=>s.id===setId?{...s,folderId:folderId||undefined}:s);
-    setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
-    const updatedSet = newHistory.find(s=>s.id===setId);
-    if (updatedSet&&tier==='pro') syncToFirebase(updatedSet);
-  };
-
-  const syncFromFirebase = async (userId:string) => {
-    try {
-      setSyncStatus('syncing');
-      const qs = await getDocs(collection(db,'profiles',userId,'study_sets'));
-      const firebaseSets:StudySet[] = [];
-      qs.forEach((d)=>firebaseSets.push(d.data() as StudySet));
-      if (firebaseSets.length>0) {
-        const localSets = safeParseJSON('hz_study_history',[]);
-        const merged = [...firebaseSets,...localSets.filter((ls:StudySet)=>!firebaseSets.some((fs:StudySet)=>fs.id===ls.id))].slice(0,50);
-        setStudyHistory(merged); saveToStorage('hz_study_history',merged);
-      }
-      setSyncStatus('synced');
-    } catch(e) { setSyncStatus('offline'); }
-  };
-
-  const syncToFirebase = async (studySet:StudySet) => {
-    if (!user||tier!=='pro') return;
-    try {
-      setSyncStatus('syncing');
-      await setDoc(doc(db,'profiles',user.uid,'study_sets',studySet.id.toString()),{...studySet,userId:user.uid,syncedAt:serverTimestamp()});
-      setSyncStatus('synced');
-    } catch(e) { setSyncStatus('offline'); }
-  };
-
-  const deleteStudySet = async (e:any,setId:number) => {
-    e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this study set?')) return;
-    const newHistory = studyHistory.filter(s=>s.id!==setId);
-    setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
-    if (user&&tier==='pro') { try { await deleteDoc(doc(db,'profiles',user.uid,'study_sets',setId.toString())); } catch(err){} }
-    if (currentStudySet?.id===setId) { setCurrentView('dashboard'); window.history.pushState(null,'','/dashboard/'); }
-  };
-
-  const callLLM = async (systemPrompt:string,userText:string,files?:File[]) => {
-    if (files&&files.length>0) {
-      const keyRes = await fetch('/api/gemini');
-      const keyData = await keyRes.json();
-      if (keyData.error||(!keyData.apiKeys&&!keyData.apiKey)) throw new Error('Could not retrieve Gemini API keys');
-      const apiKeys = keyData.apiKeys||[keyData.apiKey];
-      let lastErrorMsg = '';
-      for (const apiKey of apiKeys) {
-        const toCleanup:string[] = [];
-        try {
-          for (const file of files) {
-            const up = await fetch(`https://generativelanguage.googleapis.com/upload/v1beta/files?key=${apiKey}`,{
-              method:'POST',headers:{'X-Goog-Upload-Protocol':'raw','X-Goog-Upload-Header-Content-Type':file.type||'application/pdf','Content-Type':file.type||'application/pdf'},body:file});
-            const upData = await up.json();
-            if (!up.ok||!upData.file) throw new Error(upData.error?.message||'Upload failed');
-            toCleanup.push(upData.file.name);
-            let state = upData.file.state;
-            while (state==='PROCESSING') {
-              await new Promise(r=>setTimeout(r,3000));
-              const chk = await (await fetch(`https://generativelanguage.googleapis.com/v1beta/${upData.file.name}?key=${apiKey}`)).json();
-              state = chk.state;
-              if (state==='FAILED') throw new Error('AI failed to process the document.');
-            }
-          }
-          const contents:any[] = [{parts:[]}];
-          toCleanup.forEach(n=>contents[0].parts.push({fileData:{mimeType:'application/pdf',fileUri:`https://generativelanguage.googleapis.com/v1beta/${n}`}}));
-          let combinedText = systemPrompt||'';
-          if (userText) combinedText += '\n\nCONTEXT:\n'+userText;
-          if (combinedText) contents[0].parts.push({text:combinedText});
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,{
-            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents,generationConfig:{maxOutputTokens:8192,temperature:0.7}})});
-          const data = await res.json();
-          if (!res.ok||data.error) throw new Error(data.error?.message||'Gemini API Error');
-          for (const n of toCleanup) { try { await fetch(`https://generativelanguage.googleapis.com/v1beta/${n}?key=${apiKey}`,{method:'DELETE'}); } catch(e){} }
-          return data.candidates[0].content.parts[0].text;
-        } catch(e:any) {
-          lastErrorMsg = e.message;
-          for (const n of toCleanup) { try { await fetch(`https://generativelanguage.googleapis.com/v1beta/${n}?key=${apiKey}`,{method:'DELETE'}); } catch(ce){} }
-          if (lastErrorMsg.toLowerCase().includes('quota')||lastErrorMsg.includes('429')) continue;
-          else throw e;
-        }
-      }
-      throw new Error(`All API keys exhausted. Last error: ${lastErrorMsg}`);
-    }
-    const res = await fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({systemPrompt,userText})});
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    return data.result;
-  };
-
-  const generateStudySet = async (runInBackground=false) => {
-    if (tier==='free') {
-      const month = getCurrentMonth();
-      if ((stats.monthlySets[month]||0)>=2) return setGoProModalOpen(true);
-    }
-
-    let finalContext = '';
-    if (voiceText) finalContext += '\n'+voiceText;
-
-    if (inputMode==='link') {
-      const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
-      if (!urlInput?.value) return alert('Please paste a YouTube URL to begin.');
-    } else if (inputMode==='pdf') {
-      if (pdfFiles.length===0) return alert('Please upload a PDF to begin.');
-    } else if (inputMode==='voice') {
-      if (!voiceText.trim()) return alert('Please dictate or type notes to begin.');
-    }
-
-    setBgGenActive(runInBackground);
-    setBgGenDone(false);
-
-    if (!runInBackground) {
-      setIsLoading(true);
-      setLoadingProgress(0);
-    }
-
-    let progress = 0;
-    const progressInterval = !runInBackground ? setInterval(()=>{
-      if (progress<95){progress+=Math.random()*3;setLoadingProgress(Math.min(95,progress));}
-    },400) : null;
-    const tipInterval = !runInBackground ? setInterval(()=>{
-      setLoadingTip(loadingTips[Math.floor(Math.random()*loadingTips.length)]);
-    },3000) : null;
-
-    const flashcardCount = tier==='pro'?15:5;
-    const quizCount = tier==='pro'?10:3;
-    // Pro: ~1500 words ≈ 10 min; Free: ~300 words ≈ 2 min
-    const podWordLimit = tier==='pro'?1500:300;
-
-    try {
-      if (inputMode==='link') {
-        const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
-        const ytRes = await fetch('/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:urlInput.value})});
-        const ytData = await ytRes.json();
-        if (ytData.error) throw new Error(ytData.error);
-        finalContext += '\n'+ytData.text;
-      }
-
-      const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===" on a new line. Do not bold the SPLIT text.
-
-Section 1: SHORT TITLE (4-8 words max, DO NOT include labels like "Title:" or "Short Title:")
-===SPLIT===
-Section 2: EXECUTIVE SUMMARY (100-150 words, DO NOT include labels like "Executive Summary:")
-===SPLIT===
-Section 3: DETAILED NOTES in Markdown format. Use tables and bold text. Inline math $formula$, block $$formula$$.
-===SPLIT===
-Section 4: Create exactly ${flashcardCount} FLASHCARDS. Format strictly as a list without bolding Q/A:
-Q: [Question text]
-A: [Answer text]
-===SPLIT===
-Section 5: Create exactly ${quizCount} QUIZ QUESTIONS. Format strictly:
-Q: [Question text]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]
-Ans: [A/B/C/D]
-Exp: [Brief explanation of why this is correct]
-
-Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
-
-      const mainResult = await callLLM(mainPrompt,finalContext.substring(0,150000),pdfFiles);
-      let parts = mainResult.split(/===SPLIT===/i).map((p:string)=>p.trim());
-      while (parts.length<5) parts.push('Content generation incomplete.');
-
-      let generatedTitle = parts[0]?.replace(/^(Title:|Here is.*?|Study Set:?|\*\*.*?:\*\*|Section 1:?|Short Title:?)\s*/i,'').replace(/[*#]/g,'').trim().substring(0,100)||`Study Set - ${new Date().toLocaleDateString()}`;
-      let summaryClean = (parts[1]||'').replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*|Executive Summary:?)\s*/is,'').trim();
-      parts[1] = summaryClean;
-
-      const podPrompt = `Convert this content into a teaching monologue for an audio podcast. Short sentences, conversational tone, plain text only. Limit strictly to approximately ${podWordLimit} words. Content: ${parts[1]||finalContext.substring(0,3000)}`;
-      const podResult = await callLLM(podPrompt,'');
-      const cleanPodResult = podResult.replace(/\*[^*]*\*/g,'').replace(/\([^)]*\)/g,'').replace(/\[[^\]]*\]/g,'').replace(/\s+/g,' ').trim();
-
-      if (progressInterval) clearInterval(progressInterval);
-      if (tipInterval) clearInterval(tipInterval);
-      if (!runInBackground) setLoadingProgress(100);
-
-      const studySet:StudySet = {
-        id:Date.now(),title:generatedTitle,date:new Date().toISOString(),summary:parts[1].substring(0,200)+'...',
-        flashcardCount,quizCount,parts,podcast:cleanPodResult,chatCount:0,
-      };
-
-      const newHistory = [studySet,...studyHistory].slice(0,50);
-      setStudyHistory(newHistory);
-      saveToStorage('hz_study_history',newHistory);
-      if (tier==='pro') await syncToFirebase(studySet);
-
-      const today = new Date().toDateString();
-      const newStats = {...stats};
-      if (newStats.lastDate!==today){newStats.streak+=1;newStats.lastDate=today;}
-      newStats.notes+=1;
-      const month = getCurrentMonth();
-      newStats.monthlySets[month] = (newStats.monthlySets[month]||0)+1;
-      saveStatsAndFolders(newStats,folders);
-
-      setPdfFiles([]); setVoiceText('');
-      if (!runInBackground) {
-        setIsLoading(false);
-        loadStudySet(studySet);
-      } else {
-        setBgGenActive(false);
-        setBgGenDone(true);
-        setTimeout(()=>setBgGenDone(false),8000);
-      }
-    } catch(e:any) {
-      if (progressInterval) clearInterval(progressInterval);
-      if (tipInterval) clearInterval(tipInterval);
-      if (!runInBackground) setIsLoading(false);
-      setBgGenActive(false);
-      if (!runInBackground) alert('Error: '+e.message);
-      else { setBgGenDone(false); alert('Background generation failed: '+e.message); }
-    }
-  };
-
-  const handleAddContext = async () => {
-    if (tier!=='pro') return setGoProModalOpen(true);
-    if (!currentStudySet) return;
-    let finalContext = '';
-    if (contextVoiceText) finalContext += '\n'+contextVoiceText;
-    if (contextInputMode==='link') {
-      const urlInput = document.getElementById('context-url-input') as HTMLInputElement;
-      if (!urlInput?.value) return alert('Please paste a YouTube URL.');
-      setIsAddingContextLoading(true);
-      try {
-        const ytRes = await fetch('/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:urlInput.value})});
-        const ytData = await ytRes.json();
-        if (ytData.error) throw new Error(ytData.error);
-        finalContext += '\n'+ytData.text;
-      } catch(e:any) { setIsAddingContextLoading(false); return alert('Error fetching YouTube: '+e.message); }
-    } else if (contextInputMode==='pdf') {
-      if (contextPdfFiles.length===0) return alert('Please upload a PDF.');
-    } else if (contextInputMode==='voice') {
-      if (!contextVoiceText.trim()) return alert('Please type notes to begin.');
-    }
-    setIsAddingContextLoading(true);
-    try {
-      const prompt = `You are an expert tutor. Integrate the new source material into the existing notes seamlessly.
-Return ONLY in this EXACT format:
-TITLE: [New Updated Title (4-8 words max)]
-===SPLIT===
-[Updated Comprehensive Notes in Markdown format]`;
-      const result = await callLLM(prompt,finalContext,contextInputMode==='pdf'?contextPdfFiles:undefined);
-      const parts = result.split('===SPLIT===');
-      let newTitle = currentStudySet.title;
-      let cleanNotes = result;
-      if (parts.length>1) { newTitle=parts[0].replace(/TITLE:/i,'').replace(/\*/g,'').trim(); cleanNotes=parts[1].replace(/^```[a-z]*\n/im,'').replace(/\n```$/m,'').trim(); }
-      else cleanNotes=parts[0].replace(/^```[a-z]*\n/im,'').replace(/\n```$/m,'').trim();
-      const newParts = [...currentStudySet.parts];
-      newParts[2] = cleanNotes;
-      const updatedSet = {...currentStudySet,title:newTitle,parts:newParts};
-      setCurrentStudySet(updatedSet);
-      const newHistory = studyHistory.map(s=>s.id===updatedSet.id?updatedSet:s);
-      setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
-      if (tier==='pro') syncToFirebase(updatedSet);
-      setContextPdfFiles([]); setContextVoiceText(''); setAddContextModalOpen(false); setIsAddingContextLoading(false);
-      alert('Context seamlessly integrated!');
-    } catch(e:any) { setIsAddingContextLoading(false); alert('Error: '+e.message); }
-  };
-
-  const loadStudySet = (studySet:StudySet,updateUrl=true) => {
-    setCurrentStudySet(studySet);
-    setIsEditing(false);
-    setAudioUrl(null);
-    setPlaybackRate(1);
-    setChatMessages([{role:'ai',text:`Hi! I've analyzed <b>${studySet.title}</b>. How can I help?`}]);
+  // ── Load study set ─────────────────────────────────────────────────────────
+  const loadStudySet = useCallback((set: StudySet) => {
+    setCurrentStudySet(set);
     setCurrentView('study');
     setCurrentTab('notes');
-    if (updateUrl) window.history.pushState(null,'',`?set=${studySet.id}`);
-  };
+    setIsEditing(false);
+    setAudioProgress(0);
+    setAudioDuration(0);
+    setIsPlaying(false);
+    const cachedAudio = audioUrlMapRef.current[set.id];
+    setAudioUrl(cachedAudio || null);
+    setChatMessages([{
+      role: 'ai',
+      text: `<b>Now studying: "${set.title}"</b><br/>Ask me anything about this topic!`,
+    }]);
+    window.history.pushState(null, '', '/dashboard/study/');
+  }, []);
 
-  const translateNotes = async () => {
-    if (!currentStudySet) return;
-    const langSelect = document.getElementById('translate-language') as HTMLSelectElement;
-    const lang = langSelect?.value||'Urdu';
-    setTranslateProgress(0);
-    const interval = setInterval(()=>{setTranslateProgress(p=>p<90?p+(Math.random()*5):p);},800);
-    try {
-      const content = currentStudySet.parts.join('\n===SPLIT===\n');
-      const podcastText = currentStudySet.podcast;
-      const prompt = `Translate this ENTIRE study set into ${lang}. Maintain ALL '===SPLIT===' separators exactly. Keep markdown formatting intact.\n\nCONTENT:\n${content}\n\n===PODCAST_START===\n${podcastText}`;
-      const result = await callLLM(prompt,'');
-      const [mainBody,newPodcastText] = result.split('===PODCAST_START===');
-      const newParts = mainBody.split('===SPLIT===').map((p:string)=>p.trim());
-      const newSet:StudySet = {
-        ...currentStudySet,id:Date.now(),title:`${currentStudySet.title} (${lang})`,
-        parts:newParts.length>=5?newParts:currentStudySet.parts,
-        podcast:newPodcastText?newPodcastText.trim():currentStudySet.podcast,date:new Date().toISOString(),
-      };
-      clearInterval(interval); setTranslateProgress(100);
-      setTimeout(()=>{
-        const newHistory = [newSet,...studyHistory].slice(0,50);
-        setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
-        if (tier==='pro') syncToFirebase(newSet);
-        setTranslateProgress(-1); setTranslateModalOpen(false); loadStudySet(newSet);
-      },500);
-    } catch(e:any) { clearInterval(interval); setTranslateProgress(-1); alert('Translation failed: '+e.message); }
-  };
-
-  const generateMoreFlashcards = async () => {
-    if (!currentStudySet) return;
-    setIsGeneratingExtra(true);
-    try {
-      const result = await callLLM(`Generate 5 MORE distinct flashcards. Format strictly:\nQ: [Question text]\nA: [Answer text]\n\nContext:\n${currentStudySet.parts[2].substring(0,15000)}`,'');
-      const updatedParts = [...currentStudySet.parts];
-      updatedParts[3] += '\n\n'+result;
-      const updatedSet = {...currentStudySet,parts:updatedParts,flashcardCount:currentStudySet.flashcardCount+5};
-      setCurrentStudySet(updatedSet);
-      const newHistory = studyHistory.map(s=>s.id===updatedSet.id?updatedSet:s);
-      setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
-      if (tier==='pro') syncToFirebase(updatedSet);
-    } catch(e){}
-    setIsGeneratingExtra(false);
-  };
-
-  const generateMoreQuiz = async () => {
-    if (!currentStudySet) return;
-    setIsGeneratingExtra(true);
-    try {
-      const result = await callLLM(`Generate 5 MORE distinct multiple choice quiz questions. Format strictly:\nQ: [Question]\nA) ...\nB) ...\nC) ...\nD) ...\nAns: [A/B/C/D]\nExp: [explanation]\n\nContext:\n${currentStudySet.parts[2].substring(0,15000)}`,'');
-      const updatedParts = [...currentStudySet.parts];
-      updatedParts[4] += '\n\n'+result;
-      const updatedSet = {...currentStudySet,parts:updatedParts,quizCount:currentStudySet.quizCount+5};
-      setCurrentStudySet(updatedSet);
-      const newHistory = studyHistory.map(s=>s.id===updatedSet.id?updatedSet:s);
-      setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
-      if (tier==='pro') syncToFirebase(updatedSet);
-    } catch(e){}
-    setIsGeneratingExtra(false);
-  };
-
-  const regenerateFlashcards = async () => {
-    if (!currentStudySet) return;
-    if (!confirm('This will replace all existing flashcards with a fresh set. Continue?')) return;
-    setIsGeneratingExtra(true);
-    try {
-      const count = tier==='pro'?15:5;
-      const result = await callLLM(`Generate exactly ${count} flashcards from this material. Use varied question styles. Format strictly:\nQ: [Question]\nA: [Answer]\n\nContent:\n${currentStudySet.parts[2].substring(0,15000)}`,'');
-      const updatedParts = [...currentStudySet.parts];
-      updatedParts[3] = result;
-      const updatedSet = {...currentStudySet,parts:updatedParts,flashcardCount:count};
-      setCurrentStudySet(updatedSet);
-      const newHistory = studyHistory.map(s=>s.id===updatedSet.id?updatedSet:s);
-      setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
-      if (tier==='pro') syncToFirebase(updatedSet);
-    } catch(e:any){ alert('Error: '+e.message); }
-    setIsGeneratingExtra(false);
-  };
-
-  const regenerateQuiz = async () => {
-    if (!currentStudySet) return;
-    if (!confirm('This will replace all existing quiz questions with a fresh set. Continue?')) return;
-    setIsGeneratingExtra(true);
-    try {
-      const count = tier==='pro'?10:3;
-      const result = await callLLM(`Generate exactly ${count} multiple choice questions from this material. Format strictly:\nQ: [Question]\nA) ...\nB) ...\nC) ...\nD) ...\nAns: [A/B/C/D]\nExp: [explanation]\n\nContent:\n${currentStudySet.parts[2].substring(0,15000)}`,'');
-      const updatedParts = [...currentStudySet.parts];
-      updatedParts[4] = result;
-      const updatedSet = {...currentStudySet,parts:updatedParts,quizCount:count};
-      setCurrentStudySet(updatedSet);
-      const newHistory = studyHistory.map(s=>s.id===updatedSet.id?updatedSet:s);
-      setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
-      if (tier==='pro') syncToFirebase(updatedSet);
-    } catch(e:any){ alert('Error: '+e.message); }
-    setIsGeneratingExtra(false);
-  };
-
-  const togglePodcast = async () => {
-    if (!currentStudySet?.podcast) return;
+  // ── Podcast toggle ─────────────────────────────────────────────────────────
+  const togglePodcast = useCallback(async () => {
     if (audioUrl) {
-      if (isPlaying) { audioRef.current?.pause(); setIsPlaying(false); }
-      else { audioRef.current?.play(); setIsPlaying(true); }
+      // Already have audio — just play/pause
+      if (!audioRef.current) return;
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        await audioRef.current.play();
+        setIsPlaying(true);
+      }
       return;
     }
-    setIsAudioLoading(true); setPodcastProgress(0);
-    const progressInterval = setInterval(()=>setPodcastProgress(p=>p<95?p+2:p),600);
+    // Generate new audio
+    if (!currentStudySet) return;
+    setIsAudioLoading(true);
+    setPodcastProgress(0);
     try {
-      const keyRes = await fetch('/api/gemini');
-      const keyData = await keyRes.json();
-      const apiKeys = keyData.apiKeys||[keyData.apiKey];
-      const payload = {
-        contents:[{parts:[{text:currentStudySet.podcast}]}],
-        generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:'Kore'}}}},
-      };
-      let successData = null; let lastErrorMsg = '';
-      for (const apiKey of apiKeys) {
-        try {
-          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,{method:'POST',body:JSON.stringify(payload)});
-          const data = await res.json();
-          if (!res.ok||data.error) throw new Error(data.error?.message||'Failed to generate audio');
-          successData = data; break;
-        } catch(e:any) {
-          lastErrorMsg = e.message;
-          if (lastErrorMsg.toLowerCase().includes('quota')||lastErrorMsg.includes('429')) continue;
-          else throw e;
-        }
-      }
-      if (!successData) throw new Error(`Audio generation failed. Last error: ${lastErrorMsg}`);
-      const base64 = successData.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (!base64) throw new Error('No audio payload returned');
-      const wavBlob = pcmToWav(base64ToArrayBuffer(base64),24000);
-      const urlBlob = URL.createObjectURL(wavBlob);
-      clearInterval(progressInterval); setPodcastProgress(100);
-      setAudioUrl(urlBlob); setIsPlaying(true);
-      setTimeout(()=>{ if(audioRef.current){ audioRef.current.playbackRate=playbackRate; audioRef.current.play(); } },200);
-    } catch(e:any) { clearInterval(progressInterval); alert('Audio Error: '+e.message); }
-    setTimeout(()=>setIsAudioLoading(false),500);
-  };
+      const podWordLimit = tier === 'pro' ? 1500 : 225;
+      const notes = currentStudySet.parts[2] || '';
+      const scriptPrompt = `You are Professor Hazel, an engaging AI tutor. Create a podcast-style teaching monologue based on these notes. Write a natural, flowing script of approximately ${podWordLimit} words maximum. Keep it educational and engaging.\n\nNotes:\n${notes.slice(0, 6000)}`;
 
-  const changePlaybackRate = (rate:number) => {
+      const scriptRes = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: scriptPrompt, systemPrompt: 'You are Professor Hazel.' }),
+      });
+      const scriptData = await scriptRes.json();
+      const script = scriptData.result || '';
+      setPodcastProgress(50);
+
+      const ttsRes = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ttsText: script }),
+      });
+      const ttsData = await ttsRes.json();
+      if (ttsData.audioBase64) {
+        const binary = atob(ttsData.audioBase64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'audio/wav' });
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+        audioUrlMapRef.current[currentStudySet.id] = url;
+        setPodcastProgress(100);
+        setTimeout(async () => {
+          if (audioRef.current) { await audioRef.current.play(); setIsPlaying(true); }
+        }, 300);
+      }
+    } catch (e) { console.error('Podcast error', e); }
+    setIsAudioLoading(false);
+  }, [audioUrl, isPlaying, currentStudySet, tier]);
+
+  const changePlaybackRate = useCallback((rate: 0.5|1|1.5) => {
     setPlaybackRate(rate);
     if (audioRef.current) audioRef.current.playbackRate = rate;
-  };
+  }, []);
 
-  const toggleAskRecording = async () => {
-    if (isAskRecording) { askMediaRecorder.current?.stop(); setIsAskRecording(false); return; }
-    setAskResponse(''); stopProfSpeaking();
+  // ── Handle add context ─────────────────────────────────────────────────────
+  const handleAddContext = useCallback(async () => {
+    if (!currentStudySet || tier !== 'pro') return;
+    setIsAddingContextLoading(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-      askMediaRecorder.current = new MediaRecorder(stream);
-      askAudioChunks.current = [];
-      askMediaRecorder.current.ondataavailable = e=>askAudioChunks.current.push(e.data);
-      askMediaRecorder.current.onstop = async () => {
-        const audioBlob = new Blob(askAudioChunks.current,{type:'audio/webm'});
-        const reader = new FileReader();
-        reader.readAsDataURL(audioBlob);
-        reader.onloadend = async () => {
-          const base64data = (reader.result as string).split(',')[1];
-          await processVoiceQuestion(base64data,'audio/webm');
-        };
-      };
-      askMediaRecorder.current.start(); setIsAskRecording(true);
-    } catch(e){ alert('Microphone access denied or not supported.'); }
-  };
+      let contextText = '';
+      if (contextInputMode === 'voice') {
+        contextText = contextVoiceText;
+      } else if (contextInputMode === 'link') {
+        const urlEl = document.getElementById('context-url-input') as HTMLInputElement;
+        contextText = urlEl?.value || '';
+      } else if (contextInputMode === 'pdf' && contextPdfFiles.length) {
+        contextText = `[PDF context: ${contextPdfFiles.map(f => f.name).join(', ')}]`;
+      }
 
-  const processVoiceQuestion = async (base64:string,mimeType:string) => {
-    setAskResponse('<span class="animate-pulse">Analyzing audio and thinking...</span>');
-    try {
-      const prompt = `You are Professor Hazel. Use the notes context to answer the student's verbal question concisely.\n\nContext:\n${currentStudySet?.parts[2]}`;
-      const res = await fetch('/api/gemini',{method:'POST',body:JSON.stringify({systemPrompt:prompt,userText:'',audioBase64:base64,audioMimeType:mimeType})});
+      const mergePrompt = `You have existing study notes:\n\n${currentStudySet.parts[2]}\n\n---\n\nAdditional context to integrate:\n${contextText}\n\n---\n\nMerge the additional context seamlessly into the existing notes, expanding and enriching them. Return only the updated notes HTML, starting directly with the content.`;
+
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: mergePrompt }),
+      });
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      const textResponse = data.result;
-      setAskResponse(`<b>Professor Hazel:</b> ${textResponse}`);
-      const keyRes = await fetch('/api/gemini');
-      const keyData = await keyRes.json();
-      const apiKeys = keyData.apiKeys||[keyData.apiKey];
-      const payload = {contents:[{parts:[{text:textResponse}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:'Kore'}}}}};
-      let ttsData = null; let lastErrorMsg = '';
-      for (const apiKey of apiKeys) {
-        try {
-          const ttsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,{method:'POST',body:JSON.stringify(payload)});
-          const d = await ttsRes.json();
-          if (!ttsRes.ok||d.error) throw new Error(d.error?.message||'TTS error');
-          ttsData = d; break;
-        } catch(e:any) {
-          lastErrorMsg = e.message;
-          if (lastErrorMsg.toLowerCase().includes('quota')||lastErrorMsg.includes('429')) continue;
-          throw e;
-        }
-      }
-      if (!ttsData) throw new Error(`TTS failed: ${lastErrorMsg}`);
-      const audioBase64 = ttsData.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (audioBase64) {
-        const wavBlob = pcmToWav(base64ToArrayBuffer(audioBase64),24000);
-        const urlBlob = URL.createObjectURL(wavBlob);
-        if (!isAskModalOpenRef.current) return;
-        if (!profPlaybackRef.current) { profPlaybackRef.current = new Audio(); profPlaybackRef.current.onended=()=>setIsProfSpeaking(false); }
-        profPlaybackRef.current.src = urlBlob;
-        profPlaybackRef.current.play();
-        setIsProfSpeaking(true);
-      }
-    } catch(e:any) { setAskResponse(`<span class="text-red-400">Error: ${e.message}</span>`); }
-  };
-
-  const stopProfSpeaking = () => {
-    if (profPlaybackRef.current) { profPlaybackRef.current.pause(); profPlaybackRef.current.currentTime=0; setIsProfSpeaking(false); }
-  };
-
-  const handleAskProfessor = () => {
-    if (audioRef.current&&isPlaying) { audioRef.current.pause(); setIsPlaying(false); }
-    isAskModalOpenRef.current = true;
-    setAskModalOpen(true); setAskResponse(''); stopProfSpeaking();
-  };
-
-  const sendChatMessage = async () => {
-    if (!chatInput.trim()&&!chatFile) return;
-    if (!currentStudySet) return;
-    if (tier==='free'&&currentStudySet.chatCount>=3) return setGoProModalOpen(true);
-    const text = chatInput; const fileToSend = chatFile;
-    setChatInput(''); setChatFile(null);
-    setChatMessages(prev=>[...prev,{role:'user',text:text+(fileToSend?`<div class="text-xs text-green-300 mt-1 font-medium">📎 ${fileToSend.name}</div>`:'')}]);
-    if (tier==='free') {
-      const updatedSet = {...currentStudySet,chatCount:(currentStudySet.chatCount||0)+1};
+      const updatedNotes = data.result || currentStudySet.parts[2];
+      const updatedParts = [...currentStudySet.parts];
+      updatedParts[2] = updatedNotes;
+      const updatedSet = { ...currentStudySet, parts: updatedParts };
       setCurrentStudySet(updatedSet);
-      const newHistory = studyHistory.map(s=>s.id===updatedSet.id?updatedSet:s);
-      setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
+      const newHistory = studyHistory.map(s => s.id === updatedSet.id ? updatedSet : s);
+      saveStudyHistory(newHistory);
+      await syncToFirebase(updatedSet);
+
+      // Clear cached audio so podcast regenerates
+      delete audioUrlMapRef.current[updatedSet.id];
+      setAudioUrl(null);
+      setIsPlaying(false);
+    } catch (e) { console.error('Add context error', e); }
+    setIsAddingContextLoading(false);
+    setAddContextModalOpen(false);
+    setContextVoiceText('');
+    setContextPdfFiles([]);
+  }, [currentStudySet, tier, contextInputMode, contextVoiceText, contextPdfFiles, studyHistory, saveStudyHistory, syncToFirebase]);
+
+  // ── Generate study set ─────────────────────────────────────────────────────
+  const generateStudySet = useCallback(async (background = false) => {
+    // Free tier monthly limit
+    const month = getCurrentMonth();
+    const thisMonthCount = stats.monthlySets?.[month] || 0;
+    if (tier === 'free' && thisMonthCount >= 2) {
+      setGoProModalOpen(true);
+      return;
     }
-    setChatMessages(prev=>[...prev,{role:'ai',text:'<span class="animate-pulse">Thinking...</span>'}]);
+
+    let content = '';
+    if (inputMode === 'text') content = inputText;
+    else if (inputMode === 'voice') content = voiceText;
+    else if (inputMode === 'link') {
+      const urlEl = document.getElementById('youtube-url-input') as HTMLInputElement;
+      content = urlEl?.value || '';
+    }
+
+    if (!content.trim() && pdfFiles.length === 0) return;
+
+    if (background) {
+      setBgGenActive(true);
+    } else {
+      setIsLoading(true);
+      setLoadingProgress(0);
+      setLoadingTip('Analysing your content...');
+    }
+
+    const tips = [
+      'Extracting key concepts...','Building your study set...','Generating flashcards...',
+      'Crafting quiz questions...','Writing podcast script...','Almost ready!'
+    ];
+    let tipIdx = 0;
+    const tipInterval = setInterval(() => {
+      tipIdx = (tipIdx + 1) % tips.length;
+      setLoadingTip(tips[tipIdx]);
+    }, 2500);
+
+    const progressInterval = setInterval(() => {
+      setLoadingProgress(p => Math.min(p + 1.5, 92));
+    }, 200);
+
     try {
-      const prompt = `You are Professor Hazel. Answer based strictly on:\n${currentStudySet.parts.join('\n')}`;
-      const response = await callLLM(prompt,text,fileToSend?[fileToSend]:undefined);
-      setChatMessages(prev=>{const n=[...prev];n[n.length-1]={role:'ai',text:renderMarkdownWithMath(response)};return n;});
-    } catch(e:any) {
-      setChatMessages(prev=>{const n=[...prev];n[n.length-1]={role:'ai',text:`<span class="text-red-500">Error: ${e.message}</span>`};return n;});
-    }
-  };
+      const podWordLimit = tier === 'pro' ? 1500 : 225;
+      const prompt = `You are Professor Hazel. Analyse the following content and produce a comprehensive study set.
 
-  const FlashcardsViewer = ({text}:{text:string}) => {
-    const lines = text.split('\n');
-    const cards:{question:string;answer:string}[] = [];
-    let currentQ='',currentA='',state='search';
-    for (let line of lines) {
-      line = line.replace(/\*\*/g,'').trim();
-      if (!line) continue;
-      if (/^(?:Q|Question)(?:\s*\d*)?[:.]\s*(.*)/i.test(line)) {
-        if (currentQ&&currentA) cards.push({question:currentQ.trim(),answer:currentA.trim()});
-        currentQ=line.replace(/^(?:Q|Question)(?:\s*\d*)?[:.]\s*/i,''); currentA=''; state='q';
-      } else if (/^(?:A|Answer)(?:\s*\d*)?[:.]\s*(.*)/i.test(line)) {
-        currentA=line.replace(/^(?:A|Answer)(?:\s*\d*)?[:.]\s*/i,''); state='a';
+Content:
+${content}
+
+Return EXACTLY this structure separated by "===PART===":
+Part 0: A short title (max 8 words, no quotes)
+Part 1: An executive summary paragraph (3-5 sentences, plain text)
+Part 2: Detailed study notes in rich HTML with headings, bullet points, bold terms, examples
+Part 3: 10-15 flashcards in format Q: question | answer (one per line)
+Part 4: 8-10 MCQ quiz questions. Each question: "1. Question text\\nA) option\\nB) option\\nC) option\\nD) option\\nAnswer: A"
+Part 5: A podcast teaching monologue, max ${podWordLimit} words, conversational and educational`;
+
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, pdfFiles: pdfFiles.length > 0 }),
+      });
+      const data = await res.json();
+      const result = data.result || '';
+      const parts = result.split('===PART===').map((p: string) => p.trim());
+
+      const newSet: StudySet = {
+        id: Date.now(),
+        title: parts[0] || 'Study Set',
+        parts,
+        createdAt: new Date().toISOString(),
+        folderId: selectedFolder,
+      };
+
+      const newHistory = [newSet, ...studyHistory];
+      saveStudyHistory(newHistory);
+
+      const month2 = getCurrentMonth();
+      const newStats = {
+        ...stats,
+        totalSets: newHistory.length,
+        monthlySets: { ...stats.monthlySets, [month2]: (stats.monthlySets[month2] || 0) + 1 },
+      };
+      setStats(newStats);
+      localStorage.setItem('hz_stats', JSON.stringify(newStats));
+
+      if (tier === 'pro') await syncToFirebase(newSet);
+
+      clearInterval(progressInterval);
+      clearInterval(tipInterval);
+      setLoadingProgress(100);
+
+      if (background) {
+        setBgGenActive(false);
       } else {
-        if (state==='q') currentQ+='\n'+line; else if (state==='a') currentA+='\n'+line;
+        setTimeout(() => {
+          setIsLoading(false);
+          loadStudySet(newSet);
+        }, 500);
       }
+    } catch (e) {
+      console.error('Generate error', e);
+      clearInterval(progressInterval);
+      clearInterval(tipInterval);
+      setIsLoading(false);
+      setBgGenActive(false);
     }
-    if (currentQ&&currentA) cards.push({question:currentQ.trim(),answer:currentA.trim()});
-    return (
-      <div className="space-y-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {cards.map((card,i)=>(
-            <div key={i} className="flip-card" onClick={e=>e.currentTarget.classList.toggle('flipped')}>
-              <div className="flip-card-inner">
-                <div className="flip-card-front bg-gray-800/50 backdrop-blur-lg border border-gray-700" dangerouslySetInnerHTML={{__html:renderMarkdownWithMath(card.question)}}/>
-                <div className="flip-card-back" dangerouslySetInnerHTML={{__html:renderMarkdownWithMath(card.answer)}}/>
-              </div>
-            </div>
-          ))}
-          {cards.length===0&&<p className="text-gray-500 col-span-full">No flashcards parsed.</p>}
+  }, [inputMode, inputText, voiceText, pdfFiles, tier, stats, studyHistory, selectedFolder, saveStudyHistory, syncToFirebase, loadStudySet]);
+
+  // ── Voice recording ────────────────────────────────────────────────────────
+  const startVoiceRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      voiceChunksRef.current = [];
+      recorder.ondataavailable = e => voiceChunksRef.current.push(e.data);
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setIsVoiceTranscribing(true);
+        try {
+          const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType });
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64 = (reader.result as string).split(',')[1];
+            const langInstr = voiceLang === 'Auto-detect' ? 'Transcribe the audio accurately.' : `Transcribe the audio in ${voiceLang}.`;
+            const res = await fetch('/api/gemini', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                audioBase64: base64,
+                audioMimeType: recorder.mimeType,
+                systemPrompt: langInstr,
+              }),
+            });
+            const data = await res.json();
+            setVoiceText(prev => prev ? prev + ' ' + (data.result || '') : (data.result || ''));
+            setIsVoiceTranscribing(false);
+          };
+          reader.readAsDataURL(blob);
+        } catch { setIsVoiceTranscribing(false); }
+      };
+      voiceMediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsVoiceRecording(true);
+    } catch (e) { console.error('Mic error', e); }
+  }, [voiceLang]);
+
+  const stopVoiceRecording = useCallback(() => {
+    voiceMediaRecorderRef.current?.stop();
+    setIsVoiceRecording(false);
+  }, []);
+
+  // ── Chat message ───────────────────────────────────────────────────────────
+  const sendChatMessage = useCallback(async () => {
+    if (!chatInput.trim()) return;
+    const count = getDailyMsgCount();
+    if (count >= dailyLimit) {
+      setChatMessages(prev => [...prev, {
+        role: 'ai',
+        text: `<span class="text-red-400 font-bold">⚠ Daily message limit reached.</span> You've used all ${dailyLimit} messages for today. Come back tomorrow!${tier === 'free' ? ' <a href="/pricing/" class="text-green-400 underline">Upgrade to Pro</a> for more messages.' : ''}`,
+      }]);
+      return;
+    }
+    const userMsg = chatInput;
+    setChatInput('');
+    setChatMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    try {
+      const context = currentStudySet ? currentStudySet.parts[2]?.slice(0, 3000) : '';
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: userMsg,
+          systemPrompt: `You are Professor Hazel, a friendly expert tutor.${context ? ` Context from student's notes:\n${context}` : ''}\nGive clear, helpful answers. Use HTML formatting for clarity.`,
+        }),
+      });
+      const data = await res.json();
+      incrementDailyMsgCount();
+      setDailyMsgCount(getDailyMsgCount());
+      setChatMessages(prev => [...prev, { role: 'ai', text: data.result || 'Sorry, I had trouble responding.' }]);
+    } catch {
+      setChatMessages(prev => [...prev, { role: 'ai', text: 'An error occurred. Please try again.' }]);
+    }
+  }, [chatInput, dailyLimit, tier, currentStudySet]);
+
+  // ── Translate ──────────────────────────────────────────────────────────────
+  const translateNotes = useCallback(async () => {
+    if (!currentStudySet) return;
+    const langEl = document.getElementById('translate-language') as HTMLSelectElement;
+    const lang = langEl?.value || 'Urdu';
+    setTranslateProgress(0);
+    const progInterval = setInterval(() => setTranslateProgress(p => Math.min(p + 2, 90)), 200);
+    try {
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Translate the following study notes into ${lang}. Preserve all HTML formatting:\n\n${currentStudySet.parts[2]}`,
+        }),
+      });
+      const data = await res.json();
+      const updated = { ...currentStudySet, parts: [...currentStudySet.parts] };
+      updated.parts[2] = data.result || currentStudySet.parts[2];
+      setCurrentStudySet(updated);
+      saveStudyHistory(studyHistory.map(s => s.id === updated.id ? updated : s));
+      clearInterval(progInterval);
+      setTranslateProgress(100);
+      setTimeout(() => { setTranslateProgress(-1); setTranslateModalOpen(false); }, 1000);
+    } catch { clearInterval(progInterval); setTranslateProgress(-1); }
+  }, [currentStudySet, studyHistory, saveStudyHistory]);
+
+  // ── Editor selection tracking ──────────────────────────────────────────────
+  const handleEditorSelection = useCallback(() => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) editorRangeRef.current = sel.getRangeAt(0).cloneRange();
+  }, []);
+
+  // ── Ask Prof (audio Q&A) ───────────────────────────────────────────────────
+  const handleAskProfessor = useCallback(() => {
+    if (isPlaying && audioRef.current) { audioRef.current.pause(); setIsPlaying(false); }
+    isAskModalOpenRef.current = true;
+    setAskModalOpen(true);
+    setAskResponse('');
+  }, [isPlaying]);
+
+  const stopProfSpeaking = useCallback(() => {
+    if (profAudioRef.current) { profAudioRef.current.pause(); profAudioRef.current = null; }
+    setIsProfSpeaking(false);
+  }, []);
+
+  const toggleAskRecording = useCallback(async () => {
+    if (isAskRecording) {
+      askMediaRecorderRef.current?.stop();
+      setIsAskRecording(false);
+    } else {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const recorder = new MediaRecorder(stream);
+        askChunksRef.current = [];
+        recorder.ondataavailable = e => askChunksRef.current.push(e.data);
+        recorder.onstop = async () => {
+          stream.getTracks().forEach(t => t.stop());
+          const blob = new Blob(askChunksRef.current, { type: recorder.mimeType });
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64 = (reader.result as string).split(',')[1];
+            const transRes = await fetch('/api/gemini', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audioBase64: base64, audioMimeType: recorder.mimeType, systemPrompt: 'Transcribe this audio.' }),
+            });
+            const transData = await transRes.json();
+            const question = transData.result || '';
+            const context = currentStudySet?.parts[2]?.slice(0, 3000) || '';
+            const ansRes = await fetch('/api/gemini', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                prompt: question,
+                systemPrompt: `You are Professor Hazel. Answer clearly and concisely.${context ? ` Context: ${context}` : ''}`,
+              }),
+            });
+            const ansData = await ansRes.json();
+            const answer = ansData.result || '';
+            setAskResponse(answer);
+            // TTS the answer
+            try {
+              const ttsRes = await fetch('/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ttsText: answer.replace(/<[^>]+>/g, '') }),
+              });
+              const ttsData = await ttsRes.json();
+              if (ttsData.audioBase64) {
+                const bin = atob(ttsData.audioBase64);
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+                const audio = new Audio(url);
+                profAudioRef.current = audio;
+                setIsProfSpeaking(true);
+                audio.play();
+                audio.onended = () => setIsProfSpeaking(false);
+              }
+            } catch {}
+          };
+          reader.readAsDataURL(blob);
+        };
+        askMediaRecorderRef.current = recorder;
+        recorder.start();
+        setIsAskRecording(true);
+      } catch (e) { console.error('Ask mic error', e); }
+    }
+  }, [isAskRecording, currentStudySet]);
+
+  // ── Folder helpers ─────────────────────────────────────────────────────────
+  const handleSaveFolder = useCallback(() => {
+    if (!folderModal.name.trim()) return;
+    if (folderModal.type === 'create') {
+      const newFolder: Folder = { id: Date.now(), name: folderModal.name, emoji: folderModal.emoji || '📁' };
+      saveFolders([...folders, newFolder]);
+    } else if (folderModal.folderId) {
+      saveFolders(folders.map(f => f.id === folderModal.folderId ? { ...f, name: folderModal.name, emoji: folderModal.emoji } : f));
+    }
+    setFolderModal({ isOpen: false, type: 'create', name: '', emoji: '📁' });
+  }, [folderModal, folders, saveFolders]);
+
+  const deleteFolder = useCallback((folderId: number) => {
+    saveFolders(folders.filter(f => f.id !== folderId));
+    saveStudyHistory(studyHistory.map(s => s.folderId === folderId ? { ...s, folderId: null } : s));
+    setFolderModal({ isOpen: false, type: 'create', name: '', emoji: '📁' });
+  }, [folders, studyHistory, saveFolders, saveStudyHistory]);
+
+  const deleteStudySet = useCallback(async (id: number) => {
+    const newHistory = studyHistory.filter(s => s.id !== id);
+    saveStudyHistory(newHistory);
+    if (currentStudySet?.id === id) setCurrentView('dashboard');
+  }, [studyHistory, currentStudySet, saveStudyHistory]);
+
+  // ── Sidebar ────────────────────────────────────────────────────────────────
+  const displayedSets = selectedFolder === null
+    ? studyHistory
+    : studyHistory.filter(s => s.folderId === selectedFolder);
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-[#0F172A] text-white flex">
+      {/* Mobile overlay */}
+      {mobileSidebarOpen && <div className="fixed inset-0 bg-black/60 z-40 md:hidden" onClick={() => setMobileSidebarOpen(false)}/>}
+
+      {/* Sidebar */}
+      <aside className={`fixed left-0 top-0 bottom-0 z-50 bg-gray-900 border-r border-gray-800 flex flex-col transition-all duration-300 
+        ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} 
+        ${sidebarCollapsed ? 'w-[72px]' : 'w-72'}`}>
+        {/* Logo */}
+        <div className="p-4 border-b border-gray-800 flex items-center justify-between h-[72px]">
+          {!sidebarCollapsed && (
+            <Link href="/" className="flex items-center gap-2">
+              <img src="/hazelnotehorizontal.png" className="h-8 object-contain" alt="HazelNote"/>
+            </Link>
+          )}
+          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="p-2 rounded-xl hover:bg-gray-800 text-gray-400 transition ml-auto">
+            <Menu className="w-5 h-5"/>
+          </button>
         </div>
-        {tier==='pro' && (
-          <div className="text-center pt-8 border-t border-gray-700 flex flex-wrap justify-center gap-3">
-            <button onClick={generateMoreFlashcards} disabled={isGeneratingExtra} className="btn-primary px-8 py-3 bg-blue-600 hover:bg-blue-700 font-bold disabled:opacity-50">
-              {isGeneratingExtra?'Generating...':'+ 5 More Flashcards (Pro)'}
-            </button>
-            <button onClick={regenerateFlashcards} disabled={isGeneratingExtra} className="px-8 py-3 rounded-full bg-gray-700 hover:bg-gray-600 text-white font-bold border border-gray-600 disabled:opacity-50 flex items-center gap-2">
-              <RefreshCw className="w-4 h-4"/> Regenerate All (Pro)
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
 
-  const QuizViewer = ({text}:{text:string}) => {
-    const [userAnswers,setUserAnswers] = useState<Record<number,string>>({});
-    const lines = text.split('\n');
-    const questions:{q:string;opts:string[];answer:string;explanation:string}[] = [];
-    let currentQ = {q:'',opts:[] as string[],answer:'',explanation:''};
-    let state = 'search';
-    for (let line of lines) {
-      line = line.replace(/\*\*/g,'').trim();
-      if (!line) continue;
-      if (/^(?:Q|Question)(?:\s*\d*)?[:.]\s*(.*)/i.test(line)) {
-        if (currentQ.q&&currentQ.opts.length>=2&&currentQ.answer) questions.push({...currentQ});
-        currentQ={q:line.replace(/^(?:Q|Question)(?:\s*\d*)?[:.]\s*/i,''),opts:[],answer:'',explanation:''}; state='q';
-      } else if (/^[A-D][).]\s*/i.test(line)) {
-        currentQ.opts.push(line.replace(/^[A-D][).]\s*/i,'')); state='opt';
-      } else if (/^(?:Ans|Answer)(?:\s*\d*)?[:.]\s*([A-D])/i.test(line)) {
-        const m = line.match(/^(?:Ans|Answer)(?:\s*\d*)?[:.]\s*([A-D])/i);
-        if (m) currentQ.answer=m[1].toUpperCase(); state='ans';
-      } else if (/^(?:Exp|Explanation)[:.]\s*(.*)/i.test(line)) {
-        currentQ.explanation=line.replace(/^(?:Exp|Explanation)[:.]\s*/i,''); state='exp';
-      } else {
-        if (state==='q') currentQ.q+='\n'+line;
-        else if (state==='opt'&&currentQ.opts.length>0) currentQ.opts[currentQ.opts.length-1]+='\n'+line;
-        else if (state==='exp') currentQ.explanation+='\n'+line;
-      }
-    }
-    if (currentQ.q&&currentQ.opts.length>=2&&currentQ.answer) questions.push({...currentQ});
-    return (
-      <div className="max-w-3xl mx-auto space-y-8 pb-8">
-        {questions.map((q,i)=>(
-          <div key={i} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700 p-6 rounded-2xl">
-            <h4 className="font-bold text-gray-100 mb-4">{i+1}. {q.q}</h4>
-            <div className="space-y-2">
-              {q.opts.map((opt,j)=>{
-                const letter = String.fromCharCode(65+j);
-                const isSelected = userAnswers[i]===letter;
-                const isCorrect = letter===q.answer;
-                const hasAnswered = !!userAnswers[i];
-                let btnClass = 'border-gray-600 hover:bg-gray-700/50';
-                if (hasAnswered) {
-                  if (isCorrect) btnClass='bg-green-900/30 border-green-500';
-                  else if (isSelected) btnClass='bg-red-900/30 border-red-500';
-                  else btnClass='border-gray-600 opacity-50';
-                }
-                return (
-                  <label key={j} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition ${btnClass}`} style={{pointerEvents:hasAnswered?'none':'auto'}}>
-                    <input type="radio" name={`quiz_q_${i}`} value={letter} checked={isSelected} onChange={()=>setUserAnswers(prev=>({...prev,[i]:letter}))} className="accent-green-500"/>
-                    <span className="text-gray-200"><b>{letter}.</b> {opt}</span>
-                  </label>
-                );
-              })}
+        {/* Nav links */}
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          <button onClick={() => { setCurrentView('dashboard'); window.history.pushState(null,'','/dashboard/'); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm transition ${currentView==='dashboard'?'bg-green-500/20 text-green-400':'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+            <LayoutDashboard className="w-5 h-5 flex-shrink-0"/>
+            {!sidebarCollapsed && 'Dashboard'}
+          </button>
+          <button onClick={() => { setCurrentView('create'); window.history.pushState(null,'','/dashboard/create/'); }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm transition ${currentView==='create'?'bg-green-500/20 text-green-400':'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+            <PlusCircle className="w-5 h-5 flex-shrink-0"/>
+            {!sidebarCollapsed && 'Create Study Set'}
+          </button>
+          <Link href="/exam/" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm text-gray-400 hover:bg-gray-800 hover:text-white transition">
+            <ClipboardList className="w-5 h-5 flex-shrink-0"/>
+            {!sidebarCollapsed && 'Practice Exam'}
+          </Link>
+          <Link href="/professor/" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm text-gray-400 hover:bg-gray-800 hover:text-white transition">
+            <img src="/hazelnote_tutor.png" className="w-5 h-5 rounded-full object-cover flex-shrink-0 bg-white"/>
+            {!sidebarCollapsed && 'Professor Hazel'}
+          </Link>
+          <Link href="/profile/" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm text-gray-400 hover:bg-gray-800 hover:text-white transition">
+            <UserCircle className="w-5 h-5 flex-shrink-0"/>
+            {!sidebarCollapsed && 'Profile'}
+          </Link>
+          <Link href="/support/" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl font-bold text-sm text-gray-400 hover:bg-gray-800 hover:text-white transition">
+            <HelpCircle className="w-5 h-5 flex-shrink-0"/>
+            {!sidebarCollapsed && 'Support'}
+          </Link>
+
+          {/* Folders section */}
+          {!sidebarCollapsed && (
+            <div className="pt-4">
+              <div className="flex items-center justify-between px-3 mb-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Folders</span>
+                <button onClick={() => setFolderModal({ isOpen: true, type: 'create', name: '', emoji: '📁' })}
+                  className="p-1 hover:bg-gray-800 rounded-lg transition text-gray-500 hover:text-white">
+                  <FolderPlus className="w-4 h-4"/>
+                </button>
+              </div>
+              <button onClick={() => setSelectedFolder(null)}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition ${selectedFolder===null?'bg-gray-800 text-white':'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+                <FolderOpen className="w-4 h-4"/> All Sets
+              </button>
+              {folders.map(f => (
+                <div key={f.id} className="flex items-center group">
+                  <button onClick={() => setSelectedFolder(f.id)}
+                    className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition text-left ${selectedFolder===f.id?'bg-gray-800 text-white':'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+                    <span>{f.emoji}</span> {f.name}
+                  </button>
+                  <button onClick={() => setFolderModal({ isOpen: true, type: 'edit', name: f.name, emoji: f.emoji, folderId: f.id })}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-700 rounded-lg transition mr-1">
+                    <Edit2 className="w-3 h-3 text-gray-400"/>
+                  </button>
+                </div>
+              ))}
             </div>
-            {userAnswers[i]&&(
-              <div className={`mt-4 p-4 rounded-xl border ${userAnswers[i]===q.answer?'bg-green-900/20 border-green-800 text-green-300':'bg-red-900/20 border-red-800 text-red-300'}`}>
-                <p className="font-bold mb-1">{userAnswers[i]===q.answer?'Correct!':`Incorrect. Correct answer: ${q.answer}`}</p>
-                <p className="text-sm">{q.explanation||'No explanation provided.'}</p>
+          )}
+        </nav>
+
+        {/* Tier badge */}
+        {!sidebarCollapsed && (
+          <div className="p-4 border-t border-gray-800">
+            {tier === 'free' ? (
+              <Link href="/pricing/" className="block bg-gradient-to-r from-green-600 to-emerald-500 text-white text-xs font-bold px-4 py-3 rounded-xl text-center hover:opacity-90 transition">
+                ⚡ Upgrade to Pro
+              </Link>
+            ) : (
+              <div className="bg-gradient-to-r from-amber-900/30 to-orange-900/30 border border-amber-700/50 text-amber-400 text-xs font-bold px-4 py-2.5 rounded-xl text-center flex items-center justify-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5"/> Pro Plan Active
               </div>
             )}
           </div>
-        ))}
-        {questions.length===0&&<p className="text-gray-500 text-center">No quiz generated.</p>}
-        {tier==='pro' && (
-          <div className="text-center pt-8 border-t border-gray-700 mt-8 flex flex-wrap justify-center gap-3">
-            <button onClick={generateMoreQuiz} disabled={isGeneratingExtra} className="btn-primary px-8 py-3 bg-purple-600 hover:bg-purple-700 font-bold disabled:opacity-50">
-              {isGeneratingExtra?'Generating...':'+ 5 More Questions (Pro)'}
-            </button>
-            <button onClick={regenerateQuiz} disabled={isGeneratingExtra} className="px-8 py-3 rounded-full bg-gray-700 hover:bg-gray-600 text-white font-bold border border-gray-600 disabled:opacity-50 flex items-center gap-2">
-              <RefreshCw className="w-4 h-4"/> Regenerate All (Pro)
-            </button>
-          </div>
         )}
-      </div>
-    );
-  };
+      </aside>
 
-  const Sidebar = () => (
-    <aside className={`bg-gray-900 border-r border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-all duration-300 ease-in-out ${sidebarOpen?'translate-x-0':'-translate-x-full md:translate-x-0'} ${sidebarCollapsed?'md:w-0 md:opacity-0 md:overflow-hidden':'w-72'}`}>
-      <div className="p-6 flex items-center justify-between">
-        <Link href="/dashboard/" className="flex items-center gap-3 hover:opacity-90 transition">
-          <img src="/hazelnote_logo.png" alt="HazelNote Logo" className="w-10 h-10 rounded-xl object-cover"/>
-          <div className="flex flex-col">
-            <h1 className="font-extrabold text-xl tracking-tight text-white leading-none">HazelNote</h1>
-            <span className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-wider">by free-ed</span>
+      {/* Main content */}
+      <main className={`flex-1 transition-all duration-300 ${sidebarCollapsed ? 'md:ml-[72px]' : 'md:ml-72'}`}>
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 bg-[#0F172A]/80 backdrop-blur-lg border-b border-gray-800 px-4 md:px-8 h-[72px] flex items-center justify-between">
+          <button onClick={() => setMobileSidebarOpen(true)} className="md:hidden p-2 hover:bg-gray-800 rounded-xl text-gray-400">
+            <Menu className="w-5 h-5"/>
+          </button>
+          <div className="flex-1"/>
+          <div className="flex items-center gap-3">
+            {/* Daily message counter */}
+            <div className={`hidden sm:flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full border ${(dailyLimit - dailyMsgCount) <= 0 ? 'bg-red-900/20 border-red-700 text-red-400' : 'bg-gray-800 border-gray-700 text-gray-400'}`}>
+              <AlertCircle className="w-3 h-3"/>
+              {Math.max(0, dailyLimit - dailyMsgCount)}/{dailyLimit} msgs
+            </div>
+            <button onClick={() => { setCurrentView('create'); }} className="btn-primary px-4 py-2 text-sm hidden sm:flex items-center gap-2">
+              <PlusCircle className="w-4 h-4"/> New Set
+            </button>
           </div>
-        </Link>
-        <button onClick={()=>setSidebarOpen(false)} className="md:hidden p-2 text-gray-500 hover:bg-gray-800 rounded-lg transition"><X className="w-5 h-5"/></button>
-      </div>
-      <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
-        <div className="px-2 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Workspace</div>
-        <button onClick={()=>{setCurrentView('dashboard');setSidebarOpen(false);window.history.pushState(null,'','/dashboard/');}} className={`w-full text-left sidebar-item ${currentView==='dashboard'?'active':''}`}><LayoutDashboard className="w-5 h-5"/> Dashboard</button>
-        <button onClick={()=>{setCurrentView('create');setSidebarOpen(false);window.history.pushState(null,'','/dashboard/');}} className={`w-full text-left sidebar-item ${currentView==='create'?'active':''}`}><PlusCircle className="w-5 h-5"/> Create Notes</button>
-        <Link href="/exam/" className="w-full text-left sidebar-item flex items-center gap-3"><ClipboardList className="w-5 h-5"/> Take an Exam</Link>
-      </nav>
-      <div className="p-4 border-t border-gray-800 space-y-1">
-        {tier==='free'?(
-          <div className="mb-2"><button onClick={()=>setGoProModalOpen(true)} className="w-full go-pro-badge py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm">⚡ Upgrade to Pro</button></div>
-        ):(
-          <div className="mb-2 px-3 py-2 bg-green-900/30 rounded-xl">
-            <div className="flex items-center gap-2 text-xs text-green-400"><Save className="w-3 h-3"/><span>Pro Plan Active</span></div>
-            <div className="flex items-center gap-2 text-xs text-gray-500 mt-1"><RefreshCw className={`w-3 h-3 ${syncStatus==='syncing'?'animate-spin':''}`}/><span>{syncStatus==='synced'?'Synced':syncStatus==='syncing'?'Syncing...':'Offline'}</span></div>
-          </div>
-        )}
-        <Link href="/profile/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-400 hover:text-white"><UserCircle className="w-5 h-5"/> Profile & Settings</Link>
-        <Link href="/support/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-400 hover:text-white"><HelpCircle className="w-5 h-5"/> Support</Link>
-      </div>
-    </aside>
-  );
+        </header>
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-gradient-to-br from-[#0F172A] to-[#1E293B]">
-      {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm"/>}
-      <Sidebar/>
-
-      {/* Background generation toast */}
-      {bgGenDone&&(
-        <div className="fixed bottom-6 right-6 z-[100] bg-green-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-slide-in">
-          <Sparkles className="w-5 h-5"/>
-          <div>
-            <p className="font-bold text-sm">Study set ready!</p>
-            <p className="text-xs text-green-100">Check your Dashboard to open it.</p>
-          </div>
-          <button onClick={()=>setBgGenDone(false)} className="ml-2 text-green-200 hover:text-white"><X className="w-4 h-4"/></button>
-        </div>
-      )}
-
-      <main className={`flex-1 h-full overflow-y-auto relative transition-all duration-300 ${sidebarCollapsed?'md:ml-0':''}`}>
-        <button onClick={()=>setSidebarOpen(true)} className="hidden md:flex fixed top-4 left-4 z-30 p-2 bg-gray-800/80 backdrop-blur border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition items-center gap-2">
-          <Menu className="w-5 h-5"/><span className="text-sm font-medium">Menu</span>
-        </button>
-        <div className="md:hidden bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center gap-3 sticky top-0 z-30">
-          <button onClick={()=>setSidebarOpen(true)} className="p-2 text-gray-300 hover:bg-gray-800 rounded-lg transition"><Menu className="w-6 h-6"/></button>
-          <div className="flex items-center gap-2"><img src="/hazelnote_logo.png" className="w-8 h-8 rounded-lg"/><span className="font-extrabold text-lg text-white">HazelNote</span></div>
-        </div>
-
-        {currentView==='dashboard'&&(
-          <div className="p-6 md:p-8 max-w-5xl mx-auto pt-8 md:pt-12">
-            <header className="mb-10">
-              <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-2 tracking-tight">Welcome back! 👋</h2>
-              <p className="text-gray-400 text-lg">Track your progress and continue learning.</p>
-            </header>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-              <div className="glass-card p-6 flex items-center gap-5 bg-gray-800/50 backdrop-blur-lg border-gray-700">
-                <div className="w-14 h-14 rounded-2xl bg-green-900/40 flex items-center justify-center text-green-400"><Flame className="w-7 h-7"/></div>
-                <div><p className="text-sm text-gray-400 font-medium">Study Streak</p><p className="text-3xl font-extrabold text-white">{stats.streak} <span className="text-lg text-gray-500 font-medium">Days</span></p></div>
-              </div>
-              <div className="glass-card p-6 flex items-center gap-5 bg-gray-800/50 backdrop-blur-lg border-gray-700">
-                <div className="w-14 h-14 rounded-2xl bg-blue-900/40 flex items-center justify-center text-blue-400"><FileCheck2 className="w-7 h-7"/></div>
-                <div><p className="text-sm text-gray-400 font-medium">Notes Generated</p><p className="text-3xl font-extrabold text-white">{stats.notes}</p></div>
-              </div>
-              {tier==='free'&&(
-                <div className="glass-card p-6 flex items-center gap-5 bg-gray-800/50 backdrop-blur-lg border-gray-700">
-                  <div className="w-14 h-14 rounded-2xl bg-purple-900/40 flex items-center justify-center text-purple-400"><Sparkles className="w-7 h-7"/></div>
-                  <div><p className="text-sm text-gray-400 font-medium">Monthly Sets</p><p className="text-3xl font-extrabold text-white">{stats.monthlySets?.[getCurrentMonth()]||0}<span className="text-lg text-gray-500 font-medium">/2</span></p></div>
+        {/* Dashboard home */}
+        {currentView === 'dashboard' && (
+          <div className="p-4 md:p-8 max-w-6xl mx-auto pt-6 md:pt-10">
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              {[
+                { label: 'Total Sets', value: stats.totalSets, icon: <BookOpen className="w-5 h-5"/>, color: 'text-green-400' },
+                { label: 'This Month', value: stats.monthlySets?.[getCurrentMonth()] || 0, icon: <BarChart2 className="w-5 h-5"/>, color: 'text-blue-400' },
+                { label: 'Plan', value: tier === 'pro' ? 'Pro' : 'Free', icon: <Star className="w-5 h-5"/>, color: 'text-amber-400' },
+                { label: 'Messages Left', value: `${Math.max(0, dailyLimit - dailyMsgCount)}/${dailyLimit}`, icon: <AlertCircle className="w-5 h-5"/>, color: (dailyLimit - dailyMsgCount) <= 0 ? 'text-red-400' : 'text-purple-400' },
+              ].map(({ label, value, icon, color }) => (
+                <div key={label} className="bg-gray-800 border border-gray-700 rounded-2xl p-4 md:p-5">
+                  <div className={`${color} mb-2`}>{icon}</div>
+                  <div className="text-xl md:text-2xl font-extrabold text-white">{value}</div>
+                  <div className="text-xs text-gray-500 font-medium mt-0.5">{label}</div>
                 </div>
-              )}
+              ))}
             </div>
-            <div className="glass-card p-8 md:p-12 text-center relative overflow-hidden bg-gray-800/50 backdrop-blur-lg border-gray-700 mb-10">
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="w-20 h-20 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-green-400"><Sparkles className="w-10 h-10"/></div>
-              <h3 className="text-2xl font-bold text-white mb-2">Ready to learn something new?</h3>
-              <p className="text-gray-400 mb-8 max-w-md mx-auto">Upload PDFs, dictate voice notes, or paste YouTube URLs to generate your next study set.</p>
-              <button onClick={()=>setCurrentView('create')} className="btn-primary px-10 py-4 text-lg shadow-xl">Create New Study Set</button>
+
+            {/* Study sets list */}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-extrabold text-white">
+                {selectedFolder ? folders.find(f => f.id === selectedFolder)?.name || 'Folder' : 'All Study Sets'}
+              </h2>
+              <button onClick={() => setCurrentView('create')} className="btn-primary px-4 py-2 text-sm flex items-center gap-2">
+                <PlusCircle className="w-4 h-4"/> Create
+              </button>
             </div>
-            <div className="mb-4 flex items-center justify-between">
-              <div className="relative inline-block text-left z-20">
-                <button onClick={()=>setFolderDropdownOpen(!folderDropdownOpen)} className="px-5 py-2.5 rounded-xl font-bold bg-gray-800 hover:bg-gray-700 text-white flex items-center gap-2 border border-gray-700 shadow-md transition-all">
-                  {activeFilterFolder?<>{folders.find(f=>f.id===activeFilterFolder)?.emoji} {folders.find(f=>f.id===activeFilterFolder)?.name}</>:<>📁 All Sets</>}
-                  <ChevronDown className="w-4 h-4 ml-2 text-gray-400"/>
+
+            {displayedSets.length === 0 ? (
+              <div className="text-center py-16 text-gray-500">
+                <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-30"/>
+                <p className="font-bold text-lg mb-2">No study sets yet</p>
+                <p className="text-sm mb-6">Create your first study set to get started</p>
+                <button onClick={() => setCurrentView('create')} className="btn-primary px-6 py-3">
+                  <PlusCircle className="w-4 h-4 inline mr-2"/> Create Study Set
                 </button>
-                {folderDropdownOpen&&(
-                  <div className="absolute left-0 mt-2 w-64 rounded-xl shadow-2xl bg-gray-800 ring-1 ring-black ring-opacity-5 z-50 border border-gray-700 overflow-hidden">
-                    <div className="max-h-[300px] overflow-y-auto py-1">
-                      <button className="w-full text-left px-4 py-3 text-sm font-bold text-white hover:bg-gray-700 transition" onClick={()=>{setActiveFilterFolder(null);setFolderDropdownOpen(false);}}>📁 All Sets</button>
-                      {folders.map(f=>(
-                        <div key={f.id} className="flex justify-between items-center px-4 py-2 hover:bg-gray-700 group transition">
-                          <button className="flex-1 text-left text-sm font-bold text-gray-300 group-hover:text-white transition" onClick={()=>{setActiveFilterFolder(f.id);setFolderDropdownOpen(false);}}>{f.emoji} {f.name}</button>
-                          <button onClick={(e)=>{e.stopPropagation();openFolderModal('edit',f);}} className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-gray-600 rounded-md transition"><Edit2 className="w-3.5 h-3.5"/></button>
-                        </div>
-                      ))}
-                      <div className="border-t border-gray-700 my-1"></div>
-                      <button className="w-full px-4 py-3 text-sm font-bold text-green-400 hover:bg-gray-700 flex items-center gap-2 transition" onClick={()=>openFolderModal('create')}><FolderPlus className="w-4 h-4"/> Create New Folder</button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {displayedSets.map(set => (
+                  <div key={set.id} className="bg-gray-800 border border-gray-700 rounded-2xl p-5 hover:border-gray-600 transition group cursor-pointer"
+                    onClick={() => loadStudySet(set)}>
+                    <div className="flex items-start justify-between mb-3">
+                      <h3 className="font-extrabold text-white text-sm leading-snug line-clamp-2 flex-1 mr-2">{set.title}</h3>
+                      <button onClick={e => { e.stopPropagation(); deleteStudySet(set.id); }}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-900/30 rounded-lg transition text-red-400 flex-shrink-0">
+                        <Trash2 className="w-3.5 h-3.5"/>
+                      </button>
                     </div>
+                    <p className="text-gray-500 text-xs mb-4 line-clamp-2">{set.parts[1]}</p>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-600 font-medium">
+                        {new Date(set.createdAt).toLocaleDateString()}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-green-400 transition"/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Create view */}
+        {currentView === 'create' && (
+          <div className="p-4 md:p-8 max-w-4xl mx-auto pt-6 md:pt-10">
+            <div className="mb-8">
+              <h1 className="text-3xl md:text-4xl font-extrabold text-white mb-2">Create Study Set</h1>
+              <p className="text-gray-400">Add your content and let Professor Hazel build your study materials.</p>
+            </div>
+
+            {/* Free tier warning */}
+            {tier === 'free' && (
+              <div className="mb-6 bg-amber-900/20 border border-amber-700/50 rounded-2xl px-5 py-4 flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0"/>
+                <div className="flex-1">
+                  <p className="text-amber-300 text-sm font-bold">Free plan: {stats.monthlySets?.[getCurrentMonth()] || 0}/2 study sets used this month</p>
+                  <p className="text-amber-400/70 text-xs mt-0.5"><Link href="/pricing/" className="underline">Upgrade to Pro</Link> for unlimited sets.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Input mode tabs */}
+            <div className="bg-gray-900/50 p-1.5 rounded-[20px] flex gap-1 mb-6 border border-gray-800 overflow-x-auto">
+              {([
+                { mode: 'text', label: 'Text / Notes', icon: <Type className="w-4 h-4"/> },
+                { mode: 'pdf', label: 'PDF Upload', icon: <FileUp className="w-4 h-4"/> },
+                { mode: 'voice', label: 'Voice Input', icon: <Mic className="w-4 h-4"/> },
+                { mode: 'link', label: 'YouTube URL', icon: <LinkIcon className="w-4 h-4"/> },
+              ] as const).map(({ mode, label, icon }) => (
+                <button key={mode} onClick={() => setInputMode(mode)}
+                  className={`flex-1 py-3 px-4 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 whitespace-nowrap min-w-0 ${inputMode===mode?'bg-green-500 text-white shadow-md':'bg-transparent text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+                  {icon} <span className="hidden sm:inline">{label}</span>
+                </button>
+              ))}
+            </div>
+
+            {inputMode === 'text' && (
+              <div className="glass-card p-6 md:p-8 bg-gray-800/50 backdrop-blur-lg">
+                <textarea
+                  value={inputText}
+                  onChange={e => setInputText(e.target.value)}
+                  className="w-full h-52 p-5 border border-gray-600 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-700 text-white resize-none"
+                  placeholder="Paste your notes, textbook content, or any text you want to study…"
+                />
+              </div>
+            )}
+
+            {inputMode === 'pdf' && (
+              <div className="glass-card p-8 md:p-10 bg-gray-800/50 backdrop-blur-lg text-center border-2 border-dashed border-gray-600 rounded-2xl">
+                <input type="file" id="pdf-upload" multiple accept=".pdf" className="hidden"
+                  onChange={e => { const files = Array.from(e.target.files || []); setPdfFiles(prev => [...prev, ...files]); }}/>
+                <FileUp className="w-12 h-12 text-gray-500 mx-auto mb-4"/>
+                <label htmlFor="pdf-upload" className="btn-primary px-8 py-3 cursor-pointer inline-flex items-center gap-2">
+                  <FileUp className="w-4 h-4"/> Select PDFs
+                </label>
+                {pdfFiles.length > 0 && (
+                  <div className="mt-6 flex flex-wrap gap-2 justify-center">
+                    {pdfFiles.map((file, i) => (
+                      <span key={i} className="bg-green-900/30 text-green-300 text-xs px-3 py-1.5 rounded-full font-bold border border-green-800 flex items-center gap-2">
+                        {file.name}
+                        <button onClick={() => setPdfFiles(pdfFiles.filter((_,idx) => idx !== i))} className="hover:text-red-400">
+                          <X className="w-3 h-3"/>
+                        </button>
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-xl font-bold text-white mb-4">Study Sets</h3>
-              {studyHistory.filter(s=>activeFilterFolder?s.folderId===activeFilterFolder:true).length===0?(
-                <p className="text-gray-500 text-center py-8 bg-gray-800/30 rounded-2xl border border-dashed border-gray-700">No study sets found in this view.</p>
-              ):(
-                studyHistory.filter(s=>activeFilterFolder?s.folderId===activeFilterFolder:true).slice(0,10).map(set=>(
-                  <div key={set.id} onClick={()=>loadStudySet(set)} className="glass-card p-5 hover:shadow-lg transition cursor-pointer bg-gray-800/50 backdrop-blur-lg border-gray-700">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-white flex-1 mr-2">{set.title}</h4>
-                      <div className="flex items-center gap-3">
-                        <select value={set.folderId||''} onClick={(e)=>e.stopPropagation()} onChange={(e)=>assignFolderToSet(set.id,e.target.value)}
-                          className="bg-gray-900 text-xs text-gray-400 font-bold rounded-lg px-2 py-1.5 border border-gray-700 outline-none hover:bg-gray-700 transition">
-                          <option value="">No Folder</option>
-                          {folders.map(f=><option key={f.id} value={f.id}>{f.emoji} {f.name}</option>)}
-                        </select>
-                        <button onClick={(e)=>deleteStudySet(e,set.id)} className="text-gray-500 hover:text-red-400 transition p-1.5 bg-gray-900 hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button>
-                      </div>
+            )}
+
+            {inputMode === 'voice' && (
+              <div className="glass-card p-8 bg-gray-800/50 backdrop-blur-lg space-y-6">
+                {/* Language selector */}
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-bold text-gray-400 whitespace-nowrap">Language:</label>
+                  <select value={voiceLang} onChange={e => setVoiceLang(e.target.value)}
+                    className="flex-1 bg-gray-700 border border-gray-600 text-white rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:border-green-500">
+                    {VOICE_LANGUAGES.map(lang => <option key={lang} value={lang}>{lang}</option>)}
+                  </select>
+                </div>
+
+                {/* Wave animation + record button */}
+                <div className="flex flex-col items-center gap-6">
+                  <div className="flex items-end gap-3">
+                    {/* Left wave bars */}
+                    <div className="flex items-end gap-1" style={{ height: '52px' }}>
+                      {[0.0, 0.1, 0.15, 0.05, 0.2].map((delay, i) => (
+                        <div key={i}
+                          className={`voice-wave-bar w-2 rounded-full ${isVoiceRecording ? 'bg-green-400' : 'bg-gray-600'}`}
+                          style={{
+                            height: isVoiceRecording ? `${20 + (i * 7)}px` : '8px',
+                            animationDelay: isVoiceRecording ? `${delay}s` : '0s',
+                            animationPlayState: isVoiceRecording ? 'running' : 'paused',
+                            transition: 'height 0.3s ease',
+                          }}
+                        />
+                      ))}
                     </div>
-                    <p className="text-sm text-gray-400 mb-3">{set.summary}</p>
-                    <div className="flex gap-3 text-xs flex-wrap">
-                      <span className="bg-blue-900/30 text-blue-400 px-2 py-1 rounded-full font-medium">{set.flashcardCount} Cards</span>
-                      <span className="bg-green-900/30 text-green-400 px-2 py-1 rounded-full font-medium">{set.quizCount} Questions</span>
-                      <span className="text-gray-500">{new Date(set.date).toLocaleDateString()}</span>
+
+                    {/* Record Button */}
+                    <button
+                      onClick={isVoiceRecording ? stopVoiceRecording : startVoiceRecording}
+                      disabled={isVoiceTranscribing}
+                      className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-xl disabled:opacity-50 ${
+                        isVoiceRecording
+                          ? 'bg-red-500 hover:bg-red-600 animate-pulse'
+                          : 'bg-green-500 hover:bg-green-600 hover:scale-105'
+                      }`}
+                    >
+                      {isVoiceTranscribing
+                        ? <RefreshCw className="w-7 h-7 text-white animate-spin"/>
+                        : isVoiceRecording
+                          ? <Square className="w-7 h-7 text-white"/>
+                          : <Mic className="w-7 h-7 text-white"/>
+                      }
+                    </button>
+
+                    {/* Right wave bars */}
+                    <div className="flex items-end gap-1" style={{height:'52px'}}>
+                      {[0.25, 0.3, 0.35, 0.2, 0.4].map((delay,i)=>(
+                        <div key={i} className={`voice-wave-bar w-2 rounded-full ${isVoiceRecording ? 'bg-green-400' : 'bg-gray-600'}`}
+                          style={{
+                            height: isVoiceRecording ? `${20 + Math.random() * 32}px` : '8px',
+                            animationDelay: isVoiceRecording ? `${delay}s` : '0s',
+                            animationPlayState: isVoiceRecording ? 'running' : 'paused',
+                            transition: 'height 0.1s ease',
+                          }}/>
+                      ))}
                     </div>
                   </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
 
-        {currentView==='create'&&!isLoading&&!bgGenActive&&(
-          <div className="p-6 md:p-8 max-w-4xl mx-auto pt-8 md:pt-12">
-            <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-8 text-center tracking-tight">What are we studying today?</h2>
-            <div className="glass-card p-2 rounded-[32px] flex flex-col md:flex-row gap-2 mb-10 mx-auto max-w-2xl bg-gray-800/50 backdrop-blur-lg border-gray-700">
-              <button onClick={()=>setInputMode('pdf')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode==='pdf'?'bg-green-500 text-white shadow-md':'bg-transparent text-gray-400 hover:bg-gray-700'}`}><FileUp className="w-4 h-4"/> PDF Upload</button>
-              <button onClick={()=>setInputMode('voice')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode==='voice'?'bg-green-500 text-white shadow-md':'bg-transparent text-gray-400 hover:bg-gray-700'}`}><Mic className="w-4 h-4"/> Voice Record</button>
-              <button onClick={()=>setInputMode('link')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode==='link'?'bg-green-500 text-white shadow-md':'bg-transparent text-gray-400 hover:bg-gray-700'}`}><LinkIcon className="w-4 h-4"/> YouTube</button>
-            </div>
-            {inputMode==='pdf'&&(
-              <div className="glass-card p-8 md:p-12 text-center border-2 border-dashed border-gray-600 bg-gray-800/50 backdrop-blur-lg">
-                <FileText className="w-16 h-16 text-gray-500 mx-auto mb-4"/>
-                <h3 className="text-xl font-bold mb-2 text-white">Upload Handwritten or Typed Notes</h3>
-                <p className="text-gray-400 mb-8 max-w-sm mx-auto">Upload documents to AI natively! <span className="text-blue-400 block mt-2">Max Limit: {tier==='free'?'10MB':'100MB'}</span></p>
-                <input type="file" id="pdf-upload" multiple accept=".pdf" className="hidden" onChange={(e)=>{
-                  const files = Array.from(e.target.files||[]);
-                  const maxMB = tier==='free'?10:100;
-                  const currentSize = pdfFiles.reduce((a,b)=>a+b.size,0)+files.reduce((a,b)=>a+b.size,0);
-                  if (currentSize>maxMB*1024*1024) return alert(`Limit exceeded: ${maxMB}MB max.`);
-                  setPdfFiles(prev=>[...prev,...files]);
-                }}/>
-                <label htmlFor="pdf-upload" className="btn-primary px-10 py-4 cursor-pointer inline-block shadow-lg text-lg">Browse Files</label>
-                <div className="mt-8 flex flex-wrap gap-2 justify-center">
-                  {pdfFiles.map((file,i)=>(
-                    <span key={i} className="bg-green-900/40 text-green-400 text-xs px-4 py-2 rounded-full font-bold border border-green-800 flex items-center gap-2">
-                      <CheckCircle className="w-3 h-3"/> {file.name}
-                      <button onClick={()=>setPdfFiles(pdfFiles.filter((_,idx)=>idx!==i))} className="hover:text-red-400 transition ml-1 bg-green-800/50 hover:bg-red-900/50 p-1 rounded-full"><X className="w-3 h-3"/></button>
-                    </span>
-                  ))}
+                  <div className="text-center">
+                    {isVoiceTranscribing
+                      ? <p className="text-sm font-bold text-green-400 animate-pulse">Transcribing your voice…</p>
+                      : isVoiceRecording
+                        ? <p className="text-sm font-bold text-red-400">Recording — tap to stop</p>
+                        : <p className="text-sm text-gray-500">Tap mic to start recording · <span className="text-green-400 font-medium">{voiceLang}</span></p>
+                    }
+                  </div>
                 </div>
+
+                <textarea
+                  value={voiceText}
+                  onChange={e=>setVoiceText(e.target.value)}
+                  className="w-full h-36 p-5 border border-gray-600 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-700 text-white resize-none"
+                  placeholder="Transcribed text will appear here. You can also type directly…"
+                />
               </div>
             )}
-            {inputMode==='voice'&&(
-              <div className="glass-card p-8 md:p-12 text-center bg-gray-800/50 backdrop-blur-lg">
-                <textarea value={voiceText} onChange={e=>setVoiceText(e.target.value)} className="w-full h-40 p-5 border border-gray-600 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-700 text-white" placeholder="Type or dictate your notes..."/>
-              </div>
-            )}
+
             {inputMode==='link'&&(
               <div className="glass-card p-8 md:p-10 bg-gray-800/50 backdrop-blur-lg">
                 <input type="text" id="youtube-url-input" onFocus={(e)=>setTimeout(()=>e.target.scrollIntoView({behavior:'smooth',block:'center'}),300)} className="w-full border border-gray-600 rounded-xl px-4 py-3 focus:outline-none focus:border-green-500 bg-gray-700 text-white" placeholder="Paste a YouTube URL here..."/>
               </div>
             )}
+
             <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
               <button onClick={()=>generateStudySet(false)} className="btn-primary px-10 md:px-16 py-4 md:py-5 text-lg md:text-xl shadow-xl flex items-center justify-center gap-3 mx-auto w-full sm:w-auto">
                 <Wand2 className="w-5 h-5"/> Generate Study Set
               </button>
               {tier==='pro'&&(
-                <button onClick={()=>{generateStudySet(true);setCurrentView('dashboard');}} className="px-8 py-4 rounded-full border-2 border-indigo-500 bg-indigo-900/30 text-indigo-300 hover:bg-indigo-800/50 font-bold text-sm transition flex items-center justify-center gap-2 w-full sm:w-auto" title="Generate in background while you explore">
+                <button onClick={()=>{generateStudySet(true);setCurrentView('dashboard');}} className="px-8 py-4 rounded-full border-2 border-indigo-500 bg-indigo-900/30 text-indigo-300 hover:bg-indigo-800/50 font-bold text-sm transition flex items-center justify-center gap-2 w-full sm:w-auto">
                   <RefreshCw className="w-4 h-4"/> Generate in Background (Pro)
                 </button>
               )}
@@ -1192,7 +1139,6 @@ TITLE: [New Updated Title (4-8 words max)]
           </div>
         )}
 
-        {/* Background generation in progress banner */}
         {bgGenActive&&currentView!=='create'&&(
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-indigo-700 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-slide-in">
             <RefreshCw className="w-5 h-5 animate-spin"/>
@@ -1306,9 +1252,15 @@ TITLE: [New Updated Title (4-8 words max)]
                         {isPlaying&&<div className="absolute inset-0 rounded-full border-4 border-white/30 animate-ping"></div>}
                       </div>
                       <h3 className="text-3xl font-extrabold mb-2">Audio Lesson</h3>
-                      <p className="text-indigo-200 mb-6 max-w-md mx-auto text-sm">
-                        Listen to a custom AI-generated teaching monologue. ({tier==='pro'?'Max 10 mins':'Max 2 mins'})
+                      <p className="text-indigo-200 mb-2 max-w-md mx-auto text-sm">
+                        Listen to a custom AI-generated teaching monologue. ({tier==='pro'?'Max 10 mins':'Max 1.5 mins'})
                       </p>
+                      {/* Show "cached" badge if audio already generated */}
+                      {audioUrl && !isAudioLoading && (
+                        <div className="inline-flex items-center gap-1.5 bg-green-900/30 border border-green-700 text-green-400 text-xs font-bold px-3 py-1 rounded-full mb-4">
+                          <CheckCircle className="w-3 h-3"/> Audio ready — no regeneration needed
+                        </div>
+                      )}
                       {isAudioLoading&&(
                         <div className="w-full bg-indigo-950/50 rounded-full h-2 mb-6 max-w-xs mx-auto overflow-hidden">
                           <div className="bg-white h-2 transition-all duration-300" style={{width:`${podcastProgress}%`}}></div>
@@ -1336,7 +1288,6 @@ TITLE: [New Updated Title (4-8 words max)]
                           </button>
                           <button onClick={()=>{if(audioRef.current)audioRef.current.currentTime+=10;}} className="text-white hover:text-indigo-300 transition" title="+10s"><FastForward className="w-7 h-7"/></button>
                         </div>
-                        {/* Playback rate controls */}
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-indigo-300 font-bold uppercase tracking-wider mr-1">Speed:</span>
                           {([0.5,1,1.5] as const).map(rate=>(
@@ -1372,7 +1323,14 @@ TITLE: [New Updated Title (4-8 words max)]
               <img src="/hazelnote_tutor.png" className="w-10 h-10 rounded-full object-cover border-2 border-green-500 bg-green-900/30"/>
               <div><h3 className="font-extrabold text-white text-base">Professor Hazel</h3><div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-500"></span><span className="text-xs text-green-400 font-bold">Online AI Tutor</span></div></div>
             </div>
-            <button onClick={()=>{setChatOpen(false);setSidebarCollapsed(false);}} className="p-2 text-gray-400 hover:bg-gray-700 rounded-full"><X className="w-5 h-5"/></button>
+            <div className="flex items-center gap-2">
+              {/* Daily limit badge in chat header */}
+              <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold border ${(dailyLimit - dailyMsgCount) <= 0 ? 'bg-red-900/30 border-red-700 text-red-400' : 'bg-gray-700 border-gray-600 text-gray-400'}`}>
+                <AlertCircle className="w-3 h-3"/>
+                {Math.max(0, dailyLimit - dailyMsgCount)}/{dailyLimit}
+              </div>
+              <button onClick={()=>{setChatOpen(false);setSidebarCollapsed(false);}} className="p-2 text-gray-400 hover:bg-gray-700 rounded-full"><X className="w-5 h-5"/></button>
+            </div>
           </div>
           <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-gray-900 flex flex-col">
             {chatMessages.map((msg,i)=>(
@@ -1382,6 +1340,14 @@ TITLE: [New Updated Title (4-8 words max)]
               </div>
             ))}
           </div>
+          {/* Limit reached banner inside chat */}
+          {(dailyLimit - dailyMsgCount) <= 0 && (
+            <div className="mx-4 mb-2 px-4 py-2.5 bg-red-900/30 border border-red-700 rounded-xl flex items-center gap-2 text-red-400 text-xs font-bold">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0"/>
+              Daily limit reached. Resets in 24 hours.
+              {tier==='free' && <Link href="/pricing/" className="text-green-400 underline ml-1">Upgrade</Link>}
+            </div>
+          )}
           <div className="p-4 bg-gray-800 border-t border-gray-700">
             {chatFile&&(
               <div className="mb-3 flex items-center gap-2 bg-gray-700 p-2 rounded-lg text-xs font-medium text-gray-300">
@@ -1392,8 +1358,11 @@ TITLE: [New Updated Title (4-8 words max)]
             <div className="flex gap-2 items-center">
               <input type="file" id="chat-attachment" className="hidden" accept="image/*,.pdf" onChange={e=>setChatFile(e.target.files?.[0]||null)}/>
               <label htmlFor="chat-attachment" className="p-3 bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600 rounded-xl cursor-pointer transition"><Paperclip className="w-5 h-5"/></label>
-              <input type="text" value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyPress={e=>e.key==='Enter'&&sendChatMessage()} onFocus={(e)=>setTimeout(()=>e.target.scrollIntoView({behavior:'smooth',block:'center'}),300)} className="flex-1 border border-gray-600 bg-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500" placeholder="Ask a question..."/>
-              <button onClick={sendChatMessage} className="bg-green-500 text-white p-3 rounded-xl hover:bg-green-600 transition"><Send className="w-5 h-5"/></button>
+              <input type="text" value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyPress={e=>e.key==='Enter'&&sendChatMessage()} onFocus={(e)=>setTimeout(()=>e.target.scrollIntoView({behavior:'smooth',block:'center'}),300)}
+                disabled={(dailyLimit - dailyMsgCount) <= 0}
+                className="flex-1 border border-gray-600 bg-gray-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                placeholder={(dailyLimit - dailyMsgCount) <= 0 ? 'Daily limit reached. Come back tomorrow.' : 'Ask a question...'}/>
+              <button onClick={sendChatMessage} disabled={(dailyLimit - dailyMsgCount) <= 0} className="bg-green-500 text-white p-3 rounded-xl hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"><Send className="w-5 h-5"/></button>
             </div>
           </div>
         </div>
@@ -1436,7 +1405,7 @@ TITLE: [New Updated Title (4-8 words max)]
             <div className="p-6 border-b border-gray-700 flex justify-between items-center bg-indigo-900/20">
               <div>
                 <h3 className="font-extrabold text-xl text-white flex items-center gap-2"><Network className="text-indigo-400 w-6 h-6"/> Add Context (Pro)</h3>
-                <p className="text-xs text-indigo-300 mt-1">Provide more material for AI to merge into these notes.</p>
+                <p className="text-xs text-indigo-300 mt-1">Provide more material for AI to merge into these notes. Podcast will also be updated.</p>
               </div>
               <button onClick={()=>setAddContextModalOpen(false)} className="text-gray-400 hover:text-white"><X className="w-5 h-5"/></button>
             </div>
@@ -1537,7 +1506,11 @@ TITLE: [New Updated Title (4-8 words max)]
           <div className="bg-gray-800 rounded-[32px] w-full max-w-md shadow-2xl border border-gray-700 p-8 text-center">
             <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-6"><Sparkles className="w-8 h-8 text-white"/></div>
             <h3 className="text-2xl font-extrabold text-white mb-3">Upgrade to Pro</h3>
-            <p className="text-gray-400 mb-6">{tier==='free'&&stats.monthlySets?.[getCurrentMonth()]>=2?'You\'ve reached your monthly limit of 2 study sets.':'Unlock unlimited study sets, advanced editing, and more!'}</p>
+            <p className="text-gray-400 mb-6">
+              {tier==='free'&&(stats.monthlySets?.[getCurrentMonth()]||0)>=2
+                ? "You've reached your monthly limit of 2 study sets."
+                : 'Unlock unlimited study sets, advanced editing, and more!'}
+            </p>
             <div className="flex gap-3">
               <button onClick={()=>setGoProModalOpen(false)} className="flex-1 py-3 bg-gray-700 text-white rounded-xl font-bold">Maybe Later</button>
               <Link href="/pricing/" onClick={()=>setGoProModalOpen(false)} className="flex-1 py-3 bg-gradient-to-br from-green-500 to-blue-500 text-white rounded-xl font-bold flex items-center justify-center">View Plans</Link>
