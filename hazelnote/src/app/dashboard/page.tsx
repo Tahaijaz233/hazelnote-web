@@ -1,8 +1,6 @@
 'use client';
 
 import { Suspense, useEffect, useState, useRef } from 'react';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, PlusCircle, ClipboardList, UserCircle, HelpCircle, Menu, X, Flame,
   FileCheck2, Sparkles, FileUp, Mic, Link as LinkIcon, FileText, ArrowLeft, Printer,
@@ -14,10 +12,34 @@ import {
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
-import { StudySet, UserStats, Folder } from '@/types';
-import { safeParseJSON, saveToStorage, renderMarkdownWithMath, getCurrentMonth, pcmToWav, base64ToArrayBuffer, saveAudioToDB, getAudioFromDB, deleteAudioFromDB } from '@/lib/utils';
 import katex from 'katex';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+
+// Mock Next.js & Local Dependencies for Canvas Environment
+const Link = ({ href, children, className, onClick }: any) => <a href={href} className={className} onClick={onClick}>{children}</a>;
+const useRouter = () => ({ push: (url: string) => { window.location.href = url; } });
+const useSearchParams = () => new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "mock" };
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+interface StudySet { id: number; title: string; date: string; summary: string; flashcardCount: number; quizCount: number; parts: string[]; podcast: string; chatCount: number; folderId?: string; }
+interface UserStats { streak: number; notes: number; lastDate: string | null; monthlySets: Record<string, number>; }
+interface Folder { id: string; name: string; emoji: string; }
+
+const safeParseJSON = (key: string, fallback: any) => { if (typeof window === 'undefined') return fallback; try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : fallback; } catch { return fallback; } };
+const saveToStorage = (key: string, value: any) => { if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value)); };
+const renderMarkdownWithMath = (text: string) => text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br/>');
+const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
+const base64ToArrayBuffer = (base: string) => { const str = window.atob(base); const bytes = new Uint8Array(str.length); for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i); return bytes.buffer; };
+const pcmToWav = (pcm: ArrayBuffer, rate: number) => { const n=1,b=rate*n*2,a=n*2,buf=new ArrayBuffer(44+pcm.byteLength),v=new DataView(buf),w=(o:number,s:string)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};w(0,'RIFF');v.setUint32(4,36+pcm.byteLength,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,n,true);v.setUint32(24,rate,true);v.setUint32(28,b,true);v.setUint16(32,a,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,pcm.byteLength,true);new Uint8Array(buf,44).set(new Uint8Array(pcm));return new Blob([v],{type:'audio/wav'});};
+const saveAudioToDB = async (id: string, base: string) => { if (typeof window !== 'undefined') window.localStorage.setItem(id, base); };
+const getAudioFromDB = async (id: string) => { if (typeof window !== 'undefined') return window.localStorage.getItem(id); return null; };
+const deleteAudioFromDB = async (id: string) => { if (typeof window !== 'undefined') window.localStorage.removeItem(id); };
 
 const NoteEditorToolbar = ({ onFormat, onInsertHtml, editorRangeRef }: any) => {
   const [activePopup, setActivePopup] = useState<string | null>(null);
@@ -210,7 +232,7 @@ const NoteEditorToolbar = ({ onFormat, onInsertHtml, editorRangeRef }: any) => {
   );
 };
 
-function DashboardContent() {
+export default function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setParam = searchParams.get('set');
@@ -1732,4 +1754,3 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     </div>
   );
 }
-```
