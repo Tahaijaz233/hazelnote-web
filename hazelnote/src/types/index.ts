@@ -46,6 +46,10 @@ export interface UserProfile {
   last_active: Date;
   stats?: UserStats;
   folders?: Folder[];
+  chat_stats?: {
+    date: string;
+    count: number;
+  };
 }
 
 export interface PDFFile {
