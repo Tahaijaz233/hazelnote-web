@@ -8,7 +8,7 @@ import {
   Underline, Type, ImageIcon, FunctionSquare, Palette, Save, RefreshCw, FastForward,
   Rewind, MessageCircleQuestion, Highlighter, Table as TableIcon, StopCircle, ChevronDown,
   Edit2, FolderPlus, Network, Paperclip, Check, List, ListOrdered, AlignLeft, AlignCenter,
-  AlignRight, Bot,
+  AlignRight, Bot, Search,
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
@@ -16,6 +16,8 @@ import katex from 'katex';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
+import { useGenContext } from '@/app/providers';
+import { saveAudioToDB, getAudioFromDB, deleteAudioFromDB } from '@/lib/utils';
 
 interface StudySet { id: number; title: string; date: string; summary: string; flashcardCount: number; quizCount: number; parts: string[]; podcast: string; chatCount: number; folderId?: string; }
 interface UserStats { streak: number; notes: number; lastDate: string | null; monthlySets: Record<string, number>; }
@@ -27,9 +29,6 @@ const renderMarkdownWithMath = (text: string) => text.replace(/\*\*(.*?)\*\*/g, 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 const base64ToArrayBuffer = (base: string) => { const str = window.atob(base); const bytes = new Uint8Array(str.length); for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i); return bytes.buffer; };
 const pcmToWav = (pcm: ArrayBuffer, rate: number) => { const n=1,b=rate*n*2,a=n*2,buf=new ArrayBuffer(44+pcm.byteLength),v=new DataView(buf),w=(o:number,s:string)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};w(0,'RIFF');v.setUint32(4,36+pcm.byteLength,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,n,true);v.setUint32(24,rate,true);v.setUint32(28,b,true);v.setUint16(32,a,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,pcm.byteLength,true);new Uint8Array(buf,44).set(new Uint8Array(pcm));return new Blob([v],{type:'audio/wav'});};
-const saveAudioToDB = async (id: string, base: string) => { if (typeof window !== 'undefined') window.localStorage.setItem(id, base); };
-const getAudioFromDB = async (id: string) => { if (typeof window !== 'undefined') return window.localStorage.getItem(id); return null; };
-const deleteAudioFromDB = async (id: string) => { if (typeof window !== 'undefined') window.localStorage.removeItem(id); };
 
 const NoteEditorToolbar = ({ onFormat, onInsertHtml, editorRangeRef }: any) => {
   const [activePopup, setActivePopup] = useState<string | null>(null);
@@ -226,6 +225,7 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setParam = searchParams.get('set');
+  const { bgGenActive, setBgGenActive, setBgGenDone } = useGenContext();
 
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
@@ -240,8 +240,6 @@ function DashboardContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingTip, setLoadingTip] = useState('Analyzing document structure...');
-  const [bgGenActive, setBgGenActive] = useState(false);
-  const [bgGenDone, setBgGenDone] = useState(false);
 
   const [isRecordingRealTime, setIsRecordingRealTime] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -265,6 +263,7 @@ function DashboardContent() {
 
   const [tier, setTier] = useState<'free'|'pro'>('free');
   const [chatOpen, setChatOpen] = useState(false);
+  const [useWebSearch, setUseWebSearch] = useState(false);
   const [chatMessages, setChatMessages] = useState<{role:'user'|'ai';text:string}[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatFile, setChatFile] = useState<File|null>(null);
@@ -329,6 +328,20 @@ function DashboardContent() {
   }, []);
 
   useEffect(() => {
+    // Check local storage for background generated sets periodically to auto-update dashboard
+    const handleStorageChange = () => {
+      setStudyHistory(safeParseJSON('hz_study_history',[]));
+      setStats(safeParseJSON('hz_stats',{streak:0,notes:0,lastDate:null,monthlySets:{}}));
+    };
+    window.addEventListener('storage', handleStorageChange);
+    const interval = setInterval(() => {
+       const latest = safeParseJSON('hz_study_history',[]);
+       if(latest.length !== studyHistory.length) setStudyHistory(latest);
+    }, 2000);
+    return () => { window.removeEventListener('storage', handleStorageChange); clearInterval(interval); };
+  }, [studyHistory.length]);
+
+  useEffect(() => {
     if (setParam && studyHistory.length>0 && currentStudySet?.id.toString()!==setParam) {
       const set = studyHistory.find(s=>s.id.toString()===setParam);
       if (set) loadStudySet(set,false);
@@ -350,7 +363,7 @@ function DashboardContent() {
   };
 
   const checkChatLimit = async () => {
-    const limit = tier === 'pro' ? 10 : 2;
+    const limit = tier === 'pro' ? 15 : 2;
     const today = new Date().toISOString().split('T')[0];
     let currentStats = profile?.chat_stats || { date: today, count: 0 };
     
@@ -526,7 +539,7 @@ function DashboardContent() {
     if (currentStudySet?.id===setId) { setCurrentView('dashboard'); router.push('/dashboard/'); }
   };
 
-  const callLLM = async (systemPrompt:string,userText:string,files?:File[]) => {
+  const callLLM = async (systemPrompt:string,userText:string,files?:File[], useSearch:boolean = false) => {
     if (files&&files.length>0) {
       const keyRes = await fetch('/api/gemini');
       const keyData = await keyRes.json();
@@ -555,8 +568,12 @@ function DashboardContent() {
           let combinedText = systemPrompt||'';
           if (userText) combinedText += '\n\nCONTEXT:\n'+userText;
           if (combinedText) contents[0].parts.push({text:combinedText});
+          
+          const payload: any = { contents, generationConfig: { maxOutputTokens: 8192, temperature: 0.7 } };
+          if (useSearch) payload.tools = [{ google_search: {} }];
+
           const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,{
-            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents,generationConfig:{maxOutputTokens:8192,temperature:0.7}})});
+            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
           const data = await res.json();
           if (!res.ok||data.error) throw new Error(data.error?.message||'Gemini API Error');
           for (const n of toCleanup) { try { await fetch(`https://generativelanguage.googleapis.com/v1beta/${n}?key=${apiKey}`,{method:'DELETE'}); } catch(e){} }
@@ -570,7 +587,7 @@ function DashboardContent() {
       }
       throw new Error(`All API keys exhausted. Last error: ${lastErrorMsg}`);
     }
-    const res = await fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({systemPrompt,userText})});
+    const res = await fetch('/api/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({systemPrompt,userText,useSearch})});
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     return data.result;
@@ -594,108 +611,117 @@ function DashboardContent() {
       if (!voiceText.trim()) return alert('Please dictate or type notes to begin.');
     }
 
-    setBgGenActive(runInBackground);
-    setBgGenDone(false);
-
+    setBgGenActive(true);
     if (!runInBackground) {
       setIsLoading(true);
       setLoadingProgress(0);
     }
+    
+    // Run generation as a detached async task so it completes even if component unmounts
+    (async () => {
+      let progress = 0;
+      const progressInterval = !runInBackground ? setInterval(()=>{
+        if (progress<95){progress+=Math.random()*3;setLoadingProgress(Math.min(95,progress));}
+      },400) : null;
+      const tipInterval = !runInBackground ? setInterval(()=>{
+        setLoadingTip(loadingTips[Math.floor(Math.random()*loadingTips.length)]);
+      },3000) : null;
 
-    let progress = 0;
-    const progressInterval = !runInBackground ? setInterval(()=>{
-      if (progress<95){progress+=Math.random()*3;setLoadingProgress(Math.min(95,progress));}
-    },400) : null;
-    const tipInterval = !runInBackground ? setInterval(()=>{
-      setLoadingTip(loadingTips[Math.floor(Math.random()*loadingTips.length)]);
-    },3000) : null;
+      const flashcardCount = tier==='pro'?15:5;
+      const quizCount = tier==='pro'?10:3;
+      const podWordLimit = tier==='pro'?1500:225;
 
-    const flashcardCount = tier==='pro'?15:5;
-    const quizCount = tier==='pro'?10:3;
-    const podWordLimit = tier==='pro'?1500:225;
+      try {
+        if (inputMode==='link') {
+          const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
+          const ytRes = await fetch('/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:urlInput?.value || ''})});
+          const ytData = await ytRes.json();
+          if (ytData.error) throw new Error(ytData.error);
+          finalContext += '\n'+ytData.text;
+        }
 
-    try {
-      if (inputMode==='link') {
-        const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
-        const ytRes = await fetch('/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:urlInput.value})});
-        const ytData = await ytRes.json();
-        if (ytData.error) throw new Error(ytData.error);
-        finalContext += '\n'+ytData.text;
-      }
+        const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===" on a new line. Do not bold the SPLIT text.
 
-      const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===" on a new line. Do not bold the SPLIT text.
+  Section 1: SHORT TITLE (4-8 words max, DO NOT include labels like "Title:" or "Short Title:")
+  ===SPLIT===
+  Section 2: EXECUTIVE SUMMARY (100-150 words, DO NOT include labels like "Executive Summary:")
+  ===SPLIT===
+  Section 3: DETAILED NOTES in Markdown format. Use tables and bold text. Inline math $formula$, block $$formula$$.
+  ===SPLIT===
+  Section 4: Create exactly ${flashcardCount} FLASHCARDS. Format strictly as a list without bolding Q/A:
+  Q: [Question text]
+  A: [Answer text]
+  ===SPLIT===
+  Section 5: Create exactly ${quizCount} QUIZ QUESTIONS. Format strictly:
+  Q: [Question text]
+  A) [Option A]
+  B) [Option B]
+  C) [Option C]
+  D) [Option D]
+  Ans: [A/B/C/D]
+  Exp: [Brief explanation of why this is correct]
 
-Section 1: SHORT TITLE (4-8 words max, DO NOT include labels like "Title:" or "Short Title:")
-===SPLIT===
-Section 2: EXECUTIVE SUMMARY (100-150 words, DO NOT include labels like "Executive Summary:")
-===SPLIT===
-Section 3: DETAILED NOTES in Markdown format. Use tables and bold text. Inline math $formula$, block $$formula$$.
-===SPLIT===
-Section 4: Create exactly ${flashcardCount} FLASHCARDS. Format strictly as a list without bolding Q/A:
-Q: [Question text]
-A: [Answer text]
-===SPLIT===
-Section 5: Create exactly ${quizCount} QUIZ QUESTIONS. Format strictly:
-Q: [Question text]
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]
-Ans: [A/B/C/D]
-Exp: [Brief explanation of why this is correct]
+  Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
 
-Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
+        const mainResult = await callLLM(mainPrompt,finalContext.substring(0,150000),pdfFiles);
+        let parts = mainResult.split(/===SPLIT===/i).map((p:string)=>p.trim());
+        while (parts.length<5) parts.push('Content generation incomplete.');
 
-      const mainResult = await callLLM(mainPrompt,finalContext.substring(0,150000),pdfFiles);
-      let parts = mainResult.split(/===SPLIT===/i).map((p:string)=>p.trim());
-      while (parts.length<5) parts.push('Content generation incomplete.');
+        let generatedTitle = parts[0]?.replace(/^(Title:|Here is.*?|Study Set:?|\*\*.*?:\*\*|Section 1:?|Short Title:?)\s*/i,'').replace(/[*#]/g,'').trim().substring(0,100)||`Study Set - ${new Date().toLocaleDateString()}`;
+        let summaryClean = (parts[1]||'').replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*|Executive Summary:?)\s*/is,'').trim();
+        parts[1] = summaryClean;
 
-      let generatedTitle = parts[0]?.replace(/^(Title:|Here is.*?|Study Set:?|\*\*.*?:\*\*|Section 1:?|Short Title:?)\s*/i,'').replace(/[*#]/g,'').trim().substring(0,100)||`Study Set - ${new Date().toLocaleDateString()}`;
-      let summaryClean = (parts[1]||'').replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*|Executive Summary:?)\s*/is,'').trim();
-      parts[1] = summaryClean;
+        const podPrompt = `Convert this content into an engaging teaching monologue for an audio podcast. Use short sentences, a conversational tone, and plain text only. Limit strictly to approximately ${podWordLimit} words. Content: ${parts[1]||finalContext.substring(0,3000)}`;
+        const podResult = await callLLM(podPrompt,'');
+        const cleanPodResult = podResult.replace(/\*[^*]*\*/g,'').replace(/\([^)]*\)/g,'').replace(/\[[^\]]*\]/g,'').replace(/\s+/g,' ').trim();
 
-      const podPrompt = `Convert this content into an engaging teaching monologue for an audio podcast. Use short sentences, a conversational tone, and plain text only. Limit strictly to approximately ${podWordLimit} words. Content: ${parts[1]||finalContext.substring(0,3000)}`;
-      const podResult = await callLLM(podPrompt,'');
-      const cleanPodResult = podResult.replace(/\*[^*]*\*/g,'').replace(/\([^)]*\)/g,'').replace(/\[[^\]]*\]/g,'').replace(/\s+/g,' ').trim();
+        if (progressInterval) clearInterval(progressInterval);
+        if (tipInterval) clearInterval(tipInterval);
 
-      if (progressInterval) clearInterval(progressInterval);
-      if (tipInterval) clearInterval(tipInterval);
-      if (!runInBackground) setLoadingProgress(100);
+        const studySet:StudySet = {
+          id:Date.now(),title:generatedTitle,date:new Date().toISOString(),summary:parts[1].substring(0,200)+'...',
+          flashcardCount,quizCount,parts,podcast:cleanPodResult,chatCount:0,
+        };
 
-      const studySet:StudySet = {
-        id:Date.now(),title:generatedTitle,date:new Date().toISOString(),summary:parts[1].substring(0,200)+'...',
-        flashcardCount,quizCount,parts,podcast:cleanPodResult,chatCount:0,
-      };
+        // Important: Read fresh state from localStorage to prevent overwriting other background saves
+        const latestHistory = safeParseJSON('hz_study_history',[]);
+        const newHistory = [studySet,...latestHistory].slice(0,50);
+        saveToStorage('hz_study_history',newHistory);
+        if (tier==='pro') await syncToFirebase(studySet);
 
-      const newHistory = [studySet,...studyHistory].slice(0,50);
-      setStudyHistory(newHistory);
-      saveToStorage('hz_study_history',newHistory);
-      if (tier==='pro') await syncToFirebase(studySet);
+        const latestStats = safeParseJSON('hz_stats',{streak:0,notes:0,lastDate:null,monthlySets:{}});
+        const today = new Date().toDateString();
+        const newStats = {...latestStats};
+        if (newStats.lastDate!==today){newStats.streak+=1;newStats.lastDate=today;}
+        newStats.notes+=1;
+        const month = getCurrentMonth();
+        newStats.monthlySets[month] = (newStats.monthlySets[month]||0)+1;
+        saveToStorage('hz_stats',newStats);
+        if (user) { try { await updateDoc(doc(db,'profiles',user.uid),{stats:newStats}); } catch(e){} }
 
-      const today = new Date().toDateString();
-      const newStats = {...stats};
-      if (newStats.lastDate!==today){newStats.streak+=1;newStats.lastDate=today;}
-      newStats.notes+=1;
-      const month = getCurrentMonth();
-      newStats.monthlySets[month] = (newStats.monthlySets[month]||0)+1;
-      saveStatsAndFolders(newStats,folders);
-
-      setPdfFiles([]); setVoiceText('');
-      if (!runInBackground) {
-        setIsLoading(false);
-        loadStudySet(studySet);
-      } else {
+        if (!runInBackground) {
+          setPdfFiles([]); setVoiceText('');
+          setStudyHistory(newHistory);
+          setStats(newStats);
+          setIsLoading(false);
+          setBgGenActive(false);
+          loadStudySet(studySet);
+        } else {
+          setBgGenActive(false);
+          setBgGenDone(true);
+        }
+      } catch(e:any) {
+        if (progressInterval) clearInterval(progressInterval);
+        if (tipInterval) clearInterval(tipInterval);
+        if (!runInBackground) setIsLoading(false);
         setBgGenActive(false);
-        setBgGenDone(true);
-        setTimeout(()=>setBgGenDone(false),8000);
+        if (!runInBackground) alert('Error: '+e.message);
       }
-    } catch(e:any) {
-      if (progressInterval) clearInterval(progressInterval);
-      if (tipInterval) clearInterval(tipInterval);
-      if (!runInBackground) setIsLoading(false);
-      setBgGenActive(false);
-      if (!runInBackground) alert('Error: '+e.message);
-      else { setBgGenDone(false); alert('Background generation failed: '+e.message); }
+    })();
+
+    if (runInBackground) {
+      setPdfFiles([]); setVoiceText('');
+      setCurrentView('dashboard');
     }
   };
 
@@ -954,7 +980,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     setAskResponse('<span class="animate-pulse">Analyzing audio and thinking...</span>');
     try {
       const prompt = `You are Professor Hazel. Use the notes context to answer the student's verbal question concisely.\n\nContext:\n${currentStudySet?.parts[2]}`;
-      const res = await fetch('/api/gemini',{method:'POST',body:JSON.stringify({systemPrompt:prompt,userText:'',audioBase64:base64,audioMimeType:mimeType})});
+      const res = await fetch('/api/gemini',{method:'POST',body:JSON.stringify({systemPrompt:prompt,userText:'',audioBase64:base64,audioMimeType:mimeType,useSearch:useWebSearch})});
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       const textResponse = data.result;
@@ -1013,7 +1039,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     setChatMessages(prev=>[...prev,{role:'ai',text:'<span class="animate-pulse">Thinking...</span>'}]);
     try {
       const prompt = `You are Professor Hazel. Answer based strictly on:\n${currentStudySet.parts.join('\n')}`;
-      const response = await callLLM(prompt,text,fileToSend?[fileToSend]:undefined);
+      const response = await callLLM(prompt,text,fileToSend?[fileToSend]:undefined, useWebSearch);
       setChatMessages(prev=>{const n=[...prev];n[n.length-1]={role:'ai',text:renderMarkdownWithMath(response)};return n;});
     } catch(e:any) {
       setChatMessages(prev=>{const n=[...prev];n[n.length-1]={role:'ai',text:`<span class="text-red-500">Error: ${e.message}</span>`};return n;});
@@ -1094,7 +1120,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       <div className="max-w-3xl mx-auto space-y-8 pb-8">
         {questions.map((q,i)=>(
           <div key={i} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700 p-6 rounded-2xl">
-            <h4 className="font-bold text-gray-100 mb-4">{i+1}. {q.q}</h4>
+            <h4 className="font-bold text-gray-100 mb-4" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i+1}. ${q.q}`) }} />
             <div className="space-y-2">
               {q.opts.map((opt,j)=>{
                 const letter = String.fromCharCode(65+j);
@@ -1110,7 +1136,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                 return (
                   <label key={j} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition ${btnClass}`} style={{pointerEvents:hasAnswered?'none':'auto'}}>
                     <input type="radio" name={`quiz_q_${i}`} value={letter} checked={isSelected} onChange={()=>setUserAnswers(prev=>({...prev,[i]:letter}))} className="accent-green-500"/>
-                    <span className="text-gray-200"><b>{letter}.</b> {opt}</span>
+                    <span className="text-gray-200" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`<b>${letter}.</b> ${opt}`) }} />
                   </label>
                 );
               })}
@@ -1118,7 +1144,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
             {userAnswers[i]&&(
               <div className={`mt-4 p-4 rounded-xl border ${userAnswers[i]===q.answer?'bg-green-900/20 border-green-800 text-green-300':'bg-red-900/20 border-red-800 text-red-300'}`}>
                 <p className="font-bold mb-1">{userAnswers[i]===q.answer?'Correct!':`Incorrect. Correct answer: ${q.answer}`}</p>
-                <p className="text-sm">{q.explanation||'No explanation provided.'}</p>
+                <p className="text-sm" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(q.explanation||'No explanation provided.') }} />
               </div>
             )}
           </div>
@@ -1176,17 +1202,6 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
     <div className="flex h-screen overflow-hidden bg-gradient-to-br from-[#0F172A] to-[#1E293B]">
       {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm"/>}
       <Sidebar/>
-
-      {bgGenDone&&(
-        <div className="fixed bottom-6 right-6 z-[100] bg-green-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-slide-in">
-          <Sparkles className="w-5 h-5"/>
-          <div>
-            <p className="font-bold text-sm">Study set ready!</p>
-            <p className="text-xs text-green-100">Check your Dashboard to open it.</p>
-          </div>
-          <button onClick={()=>setBgGenDone(false)} className="ml-2 text-green-200 hover:text-white"><X className="w-4 h-4"/></button>
-        </div>
-      )}
 
       <main className={`flex-1 h-full overflow-y-auto relative transition-all duration-300 ${sidebarCollapsed?'md:ml-0':''}`}>
         <button onClick={()=>setSidebarOpen(true)} className="hidden md:flex fixed top-4 left-4 z-30 p-2 bg-gray-800/80 backdrop-blur border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition items-center gap-2">
@@ -1364,18 +1379,11 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                 <Wand2 className="w-5 h-5"/> Generate Study Set
               </button>
               {tier==='pro'&&(
-                <button onClick={()=>{generateStudySet(true);setCurrentView('dashboard');}} className="px-8 py-4 rounded-full border-2 border-indigo-500 bg-indigo-900/30 text-indigo-300 hover:bg-indigo-800/50 font-bold text-sm transition flex items-center justify-center gap-2 w-full sm:w-auto" title="Generate in background while you explore">
+                <button onClick={()=>{generateStudySet(true);}} className="px-8 py-4 rounded-full border-2 border-indigo-500 bg-indigo-900/30 text-indigo-300 hover:bg-indigo-800/50 font-bold text-sm transition flex items-center justify-center gap-2 w-full sm:w-auto" title="Generate in background while you explore">
                   <RefreshCw className="w-4 h-4"/> Generate in Background (Pro)
                 </button>
               )}
             </div>
-          </div>
-        )}
-
-        {bgGenActive&&currentView!=='create'&&(
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-indigo-700 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-slide-in">
-            <RefreshCw className="w-5 h-5 animate-spin"/>
-            <span className="font-bold text-sm">Generating study set in background…</span>
           </div>
         )}
 
@@ -1567,6 +1575,12 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                 <button onClick={()=>setChatFile(null)} className="ml-auto text-red-400 hover:text-red-300 transition p-1 hover:bg-gray-600 rounded"><X className="w-3 h-3"/></button>
               </div>
             )}
+            <div className="flex gap-2 items-center mb-2">
+              <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer hover:text-white transition">
+                <input type="checkbox" checked={useWebSearch} onChange={e => setUseWebSearch(e.target.checked)} className="accent-green-500 rounded" />
+                <span className="font-bold">Use Web Search</span>
+              </label>
+            </div>
             <div className="flex gap-2 items-center">
               <input type="file" id="chat-attachment" className="hidden" accept="image/*,.pdf" onChange={e=>setChatFile(e.target.files?.[0]||null)}/>
               <label htmlFor="chat-attachment" className="p-3 bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600 rounded-xl cursor-pointer transition"><Paperclip className="w-5 h-5"/></label>
