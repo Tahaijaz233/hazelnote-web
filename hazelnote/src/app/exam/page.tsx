@@ -11,12 +11,12 @@ import { doc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
+import { renderMarkdownWithMath } from '@/lib/utils';
 
 interface StudySet { id: number; title: string; date: string; summary: string; flashcardCount: number; quizCount: number; parts: string[]; podcast: string; chatCount: number; folderId?: string; }
 
 const safeParseJSON = <T,>(key: string, fallback: T): T => { if (typeof window === 'undefined') return fallback; try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : fallback; } catch { return fallback; } };
 const saveToStorage = (key: string, value: any) => { if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value)); };
-const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 
 interface MarkingResult {
   score: number;
@@ -34,7 +34,7 @@ export default function Exam() {
   const [studyHistory, setStudyHistory] = useState<StudySet[]>([]);
 
   const [selectedBoard, setSelectedBoard] = useState('general');
-  const [selectedStudySet, setSelectedStudySet] = useState<number | null>(null);
+  const [selectedStudySets, setSelectedStudySets] = useState<number[]>([]);
   const [difficulty, setDifficulty] = useState('medium');
   const [timeLimit, setTimeLimit] = useState('30');
   const [questionType, setQuestionType] = useState('mcq');
@@ -79,13 +79,28 @@ export default function Exam() {
     return () => clearInterval(interval);
   }, [examInProgress, timeRemaining, timeLimit]);
 
+  useEffect(() => {
+    if (questionType === 'essay' && questionCount > 10) setQuestionCount(10);
+    if (questionType === 'structured' && questionCount > 20) setQuestionCount(20);
+  }, [questionType, questionCount]);
+
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  const callGemini = async (systemPrompt: string, userText: string): Promise<string> => {
+  const getAvailableCounts = () => {
+    if (questionType === 'mcq') return [5, 10, 20, 30];
+    if (questionType === 'structured') return [5, 10, 20];
+    return [5, 10]; 
+  };
+
+  const toggleStudySetSelection = (id: number) => {
+    setSelectedStudySets(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const callGemini = async (systemPrompt: string, userText: string, isJson: boolean = false): Promise<string> => {
     const res = await fetch('/api/gemini', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ systemPrompt, userText }),
+      body: JSON.stringify({ systemPrompt, userText, responseFormat: isJson ? 'json' : undefined }),
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -114,9 +129,12 @@ export default function Exam() {
   };
 
   const generateExam = async () => {
-    if (!selectedStudySet) { alert('Please select a study set first!'); return; }
-    const studySet = studyHistory.find(s => s.id === selectedStudySet);
-    if (!studySet) { alert('Study set not found.'); return; }
+    if (selectedStudySets.length === 0) { alert('Please select at least one study set!'); return; }
+    const materials = selectedStudySets
+      .map(id => studyHistory.find(s => s.id === id)?.parts[2] || '')
+      .join('\n\n=== NEXT SOURCE ===\n\n');
+
+    if (!materials.trim()) { alert('Selected study sets are empty.'); return; }
 
     setIsGeneratingExam(true);
     try {
@@ -133,9 +151,9 @@ Return ONLY a valid JSON array of objects with this EXACT structure (do not incl
 ]
 
 Study Material:
-${studySet.parts[2]}`;
+${materials}`;
 
-        const raw = await callGemini(prompt, '');
+        const raw = await callGemini(prompt, '', true);
         const jsonQuestions = parseJSONResponse(raw);
         
         if (!Array.isArray(jsonQuestions) || jsonQuestions.length === 0) throw new Error('Could not parse questions. Please try again.');
@@ -161,9 +179,9 @@ Return ONLY a valid JSON array of objects with this EXACT structure (do not incl
 ]
 
 Study Material:
-${studySet.parts[2]}`;
+${materials}`;
 
-        const raw = await callGemini(prompt, '');
+        const raw = await callGemini(prompt, '', true);
         const jsonQuestions = parseJSONResponse(raw);
         
         if (!Array.isArray(jsonQuestions) || jsonQuestions.length === 0) throw new Error('Could not parse structured questions.');
@@ -189,9 +207,9 @@ Return ONLY a valid JSON array of objects with this EXACT structure (do not incl
 ]
 
 Study Material:
-${studySet.parts[2]}`;
+${materials}`;
 
-        const raw = await callGemini(prompt, '');
+        const raw = await callGemini(prompt, '', true);
         const jsonQuestions = parseJSONResponse(raw);
 
         if (!Array.isArray(jsonQuestions) || jsonQuestions.length === 0) throw new Error('Could not parse essay questions.');
@@ -254,7 +272,7 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
 }`;
 
         try {
-          const raw = await callGemini(prompt, '');
+          const raw = await callGemini(prompt, '', true);
           const resultJson = parseJSONObjectResponse(raw);
           
           results.push({
@@ -300,12 +318,14 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
     const quizText = examQuestions.map((q: any, i: number) => {
       if (q.type === 'mcq') {
         const opts = q.options.map((o: string, j: number) => `${String.fromCharCode(65 + j)}) ${o}`).join('\n');
-        return `Q: ${q.question}\n${opts}\nAns: ${q.answer}`;
+        return `### Q${i + 1}: ${q.question}\n\n${opts}\n\n**Correct Answer:** ${q.answer}\n**Your Answer:** ${userAnswers[i] || 'None'}\n**Result:** ${userAnswers[i] === q.answer ? '✅ Correct' : '❌ Incorrect'}`;
+      } else {
+        const res = markingResults[i];
+        return `### Q${i + 1}: ${q.question}\n\n**Your Answer:**\n${userAnswers[i] || '(no answer)'}\n\n**Score:** ${res?.score ?? '?'}/${res?.maxScore ?? 10}\n\n**Feedback:**\n- **Strengths:** ${res?.strengths}\n- **Improvements:** ${res?.improvements}\n- **Study Tips:** ${res?.studyTips}`;
       }
-      return `Q: ${q.question}\nStudent Answer: ${userAnswers[i] || '(no answer)'}\nScore: ${markingResults[i]?.score ?? '?'}/10`;
-    }).join('\n\n');
+    }).join('\n\n---\n\n');
 
-    const sourceTitle = studyHistory.find(s => s.id === selectedStudySet)?.title || 'Study Set';
+    const sourceTitles = selectedStudySets.map(id => studyHistory.find(s => s.id === id)?.title).filter(Boolean).join(', ') || 'Study Sets';
     const totalScore = questionType === 'mcq'
       ? score
       : markingResults.reduce((a, r) => a + r.score, 0);
@@ -314,17 +334,17 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
 
     const savedSet: StudySet = {
       id: Date.now(),
-      title: `Exam: ${sourceTitle}`,
+      title: `Exam: ${sourceTitles.substring(0, 50)}${sourceTitles.length > 50 ? '...' : ''}`,
       date: new Date().toISOString(),
       summary: `Score: ${totalScore}/${totalMax} (${pct}%) — ${difficulty} difficulty, ${examQuestions.length} ${questionType} questions.`,
       flashcardCount: 0,
       quizCount: examQuestions.length,
       parts: [
-        `Exam: ${sourceTitle}`,
+        `Exam: ${sourceTitles}`,
         `Score: ${totalScore}/${totalMax} (${pct}%)`,
-        `## Exam Results\n\n**Score:** ${totalScore}/${totalMax} (${pct}%)\n**Type:** ${questionType}\n**Difficulty:** ${difficulty}\n**Questions:** ${examQuestions.length}\n**Date:** ${new Date().toLocaleDateString()}`,
+        `## Exam Results\n\n**Score:** ${totalScore}/${totalMax} (${pct}%)\n**Type:** ${questionType}\n**Difficulty:** ${difficulty}\n**Questions:** ${examQuestions.length}\n**Date:** ${new Date().toLocaleDateString()}\n\n---\n\n${quizText}`,
         '',
-        quizText,
+        '',
       ],
       podcast: '',
       chatCount: 0,
@@ -392,7 +412,6 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
 
           {!examInProgress && !examCompleted && !isMarkingExam && (
             <div className="space-y-6">
-              {/* Board */}
               <div className="glass-card p-6 dark:bg-gray-800 dark:border-gray-700">
                 <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><Search className="w-5 h-5 text-purple-500" /> Board / Curriculum <span className="text-xs font-normal text-gray-400 ml-1">(optional)</span></h3>
                 <div className="flex flex-wrap gap-2">
@@ -402,15 +421,14 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
                 </div>
               </div>
 
-              {/* Study Set */}
               <div className="glass-card p-6 dark:bg-gray-800 dark:border-gray-700">
                 <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><FileText className="w-5 h-5 text-green-500" /> Select Notes</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                   {studyHistory.length === 0 ? (
                     <p className="text-sm text-gray-500 py-4 font-medium">No study sets yet. Create one in the Dashboard first!</p>
                   ) : studyHistory.map(set => (
-                    <label key={set.id} onClick={() => setSelectedStudySet(set.id)} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition ${selectedStudySet === set.id ? 'bg-green-50 border-green-500 text-green-700 dark:bg-green-900/30 dark:border-green-500 dark:text-green-400' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
-                      <input type="radio" name="exam_study_set" checked={selectedStudySet === set.id} onChange={() => setSelectedStudySet(set.id)} className="accent-green-500" />
+                    <label key={set.id} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition ${selectedStudySets.includes(set.id) ? 'bg-green-50 border-green-500 text-green-700 dark:bg-green-900/30 dark:border-green-500 dark:text-green-400' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                      <input type="checkbox" checked={selectedStudySets.includes(set.id)} onChange={() => toggleStudySetSelection(set.id)} className="accent-green-500 w-4 h-4" />
                       <div className="flex-1">
                         <div className="font-bold text-gray-800 dark:text-gray-200 text-sm">{set.title}</div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(set.date).toLocaleDateString()}</div>
@@ -420,7 +438,6 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
                 </div>
               </div>
 
-              {/* Difficulty & Time */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="glass-card p-5 dark:bg-gray-800 dark:border-gray-700">
                   <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Difficulty</label>
@@ -444,14 +461,13 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
                 </div>
               </div>
 
-              {/* Question Type */}
               <div className="glass-card p-5 dark:bg-gray-800 dark:border-gray-700">
                 <h3 className="font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2"><List className="w-5 h-5 text-blue-500" /> Question Type</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {[
                     { id: 'mcq', label: 'MCQ', desc: 'Multiple choice — auto-marked', pro: false },
                     { id: 'structured', label: 'Structured', desc: 'Short-answer with AI marking', pro: true },
-                    { id: 'essay', label: 'Essay', desc: 'Long-form with AI marking & feedback', pro: true },
+                    { id: 'essay', label: 'Essay', desc: 'Long-form with AI marking', pro: true },
                   ].map(qt => (
                     <button key={qt.id}
                       onClick={() => {
@@ -470,11 +486,10 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
                 </div>
               </div>
 
-              {/* Question Count */}
               <div className="glass-card p-5 dark:bg-gray-800 dark:border-gray-700">
                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Number of Questions</label>
                 <div className="flex gap-2 flex-wrap">
-                  {[5, 10, 20, 30].map(count => (
+                  {getAvailableCounts().map(count => (
                     <button key={count} onClick={() => tier === 'pro' || count === 5 ? setQuestionCount(count) : alert('Pro feature')}
                       className={`px-5 py-2.5 rounded-xl border-2 font-bold text-sm transition ${questionCount === count ? 'border-green-500 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400'} ${tier !== 'pro' && count > 5 ? 'opacity-60' : ''}`}>
                       {count} {tier !== 'pro' && count > 5 && <span className="text-xs bg-gradient-to-r from-amber-400 to-orange-500 text-white px-1.5 py-0.5 rounded-full">Pro</span>}
@@ -490,7 +505,6 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
             </div>
           )}
 
-          {/* AI Marking Loader */}
           {isMarkingExam && (
             <div className="text-center py-20">
               <div className="w-20 h-20 bg-indigo-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -501,7 +515,6 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
             </div>
           )}
 
-          {/* Exam in Progress */}
           {examInProgress && (
             <div>
               <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -516,9 +529,8 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
               <div className="space-y-8 glass-card p-6 md:p-10 dark:bg-gray-800 dark:border-gray-700">
                 {examQuestions.map((q, i) => (
                   <div key={i} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl">
-                    <h4 className="font-bold text-gray-900 dark:text-white mb-4">{i + 1}. {q.question}</h4>
+                    <h4 className="font-bold text-gray-900 dark:text-white mb-4" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i + 1}. ${q.question}`) }} />
 
-                    {/* MCQ Options */}
                     {q.type === 'mcq' && (
                       <div className="space-y-2">
                         {q.options.map((opt: string, j: number) => {
@@ -526,14 +538,13 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
                           return (
                             <label key={j} className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                               <input type="radio" name={`exam_q_${i}`} value={letter} checked={userAnswers[i] === letter} onChange={() => setUserAnswers(prev => ({ ...prev, [i]: letter }))} className="accent-green-500" />
-                              <span className="dark:text-gray-200"><b>{letter}.</b> {opt}</span>
+                              <span className="dark:text-gray-200" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`**${letter}.** ${opt}`) }} />
                             </label>
                           );
                         })}
                       </div>
                     )}
 
-                    {/* Structured Short-Answer */}
                     {q.type === 'structured' && (
                       <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Your Answer (3–5 sentences)</label>
@@ -548,15 +559,8 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
                       </div>
                     )}
 
-                    {/* Essay */}
                     {q.type === 'essay' && (
                       <div>
-                        {q.criteria && (
-                          <div className="mb-4 bg-blue-900/20 border border-blue-800/40 rounded-xl px-4 py-3">
-                            <p className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1">Marking Criteria</p>
-                            <p className="text-sm text-blue-300">{q.criteria}</p>
-                          </div>
-                        )}
                         <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Your Essay Response</label>
                         <textarea
                           value={userAnswers[i] || ''}
@@ -574,10 +578,8 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
             </div>
           )}
 
-          {/* Results */}
           {examCompleted && (
             <div className="space-y-6">
-              {/* Score card */}
               <div className="glass-card p-8 text-center dark:bg-gray-800 dark:border-gray-700">
                 <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Award className="w-10 h-10 text-green-600 dark:text-green-400" />
@@ -612,26 +614,21 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
                 </div>
               </div>
 
-              {/* Review section */}
               <h4 className="text-xl font-extrabold text-white">Review Answers</h4>
 
-              {/* MCQ review */}
               {questionType === 'mcq' && examQuestions.map((q, i) => {
                 const isCorrect = userAnswers[i] === q.answer;
                 return (
                   <div key={i} className={`glass-card p-5 dark:border-gray-700 border-l-4 ${isCorrect ? 'border-l-green-500' : 'border-l-red-500'}`}>
-                    <p className="font-bold text-white mb-2">{i + 1}. {q.question}</p>
+                    <p className="font-bold text-white mb-2" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i + 1}. ${q.question}`) }} />
                     <div className="text-sm space-y-1">
-                      <p className={isCorrect ? 'text-green-400 font-bold' : 'text-red-400'}>
-                        Your answer: {userAnswers[i] ? `${userAnswers[i]}. ${q.options[userAnswers[i].charCodeAt(0) - 65] || ''}` : 'Not answered'}
-                      </p>
-                      {!isCorrect && <p className="text-green-400 font-bold">Correct: {q.answer}. {q.options[q.answer.charCodeAt(0) - 65] || ''}</p>}
+                      <p className={isCorrect ? 'text-green-400 font-bold' : 'text-red-400'} dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`Your answer: ${userAnswers[i] ? `**${userAnswers[i]}**. ${q.options[userAnswers[i].charCodeAt(0) - 65] || ''}` : 'Not answered'}`) }} />
+                      {!isCorrect && <p className="text-green-400 font-bold" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`Correct: **${q.answer}**. ${q.options[q.answer.charCodeAt(0) - 65] || ''}`) }} />}
                     </div>
                   </div>
                 );
               })}
 
-              {/* Structured / Essay AI marking review */}
               {(questionType === 'structured' || questionType === 'essay') && examQuestions.map((q, i) => {
                 const result = markingResults[i];
                 const pct = result ? Math.round((result.score / result.maxScore) * 100) : 0;
@@ -639,7 +636,7 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
                 return (
                   <div key={i} className={`glass-card p-6 dark:border-gray-700 border-l-4 ${color === 'green' ? 'border-l-green-500' : color === 'yellow' ? 'border-l-yellow-500' : 'border-l-red-500'}`}>
                     <div className="flex items-start justify-between mb-3">
-                      <p className="font-bold text-white flex-1 mr-4">{i + 1}. {q.question}</p>
+                      <p className="font-bold text-white flex-1 mr-4" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i + 1}. ${q.question}`) }} />
                       {result && (
                         <span className={`shrink-0 text-lg font-extrabold px-3 py-1 rounded-full ${color === 'green' ? 'bg-green-900/30 text-green-400' : color === 'yellow' ? 'bg-yellow-900/30 text-yellow-400' : 'bg-red-900/30 text-red-400'}`}>
                           {result.score}/{result.maxScore}
@@ -650,7 +647,7 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
                     {userAnswers[i] && (
                       <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 mb-4 text-sm text-gray-300">
                         <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Your Answer</p>
-                        {userAnswers[i]}
+                        <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(userAnswers[i]) }} />
                       </div>
                     )}
 
@@ -658,15 +655,15 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
                       <div className="space-y-3">
                         <div className="flex items-start gap-2 text-sm">
                           <CheckCircle className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
-                          <div><span className="font-bold text-green-400">Strengths: </span><span className="text-gray-300">{result.strengths}</span></div>
+                          <div><span className="font-bold text-green-400">Strengths: </span><span className="text-gray-300" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(result.strengths) }} /></div>
                         </div>
                         <div className="flex items-start gap-2 text-sm">
                           <XCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                          <div><span className="font-bold text-red-400">Areas for Improvement: </span><span className="text-gray-300">{result.improvements}</span></div>
+                          <div><span className="font-bold text-red-400">Areas for Improvement: </span><span className="text-gray-300" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(result.improvements) }} /></div>
                         </div>
                         <div className="flex items-start gap-2 text-sm bg-indigo-900/20 border border-indigo-800/40 rounded-xl p-3">
                           <BookOpen className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-                          <div><span className="font-bold text-indigo-400">How to Prepare: </span><span className="text-gray-300">{result.studyTips}</span></div>
+                          <div><span className="font-bold text-indigo-400">How to Prepare: </span><span className="text-gray-300" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(result.studyTips) }} /></div>
                         </div>
                       </div>
                     )}
