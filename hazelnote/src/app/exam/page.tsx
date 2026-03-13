@@ -7,11 +7,10 @@ import {
   CheckCircle, XCircle, BookOpen, Target,
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
-import { renderMarkdownWithMath } from '@/lib/utils';
 
 interface StudySet { id: number; title: string; date: string; summary: string; flashcardCount: number; quizCount: number; parts: string[]; podcast: string; chatCount: number; folderId?: string; }
 
@@ -35,7 +34,7 @@ export default function Exam() {
   const [studyHistory, setStudyHistory] = useState<StudySet[]>([]);
 
   const [selectedBoard, setSelectedBoard] = useState('general');
-  const [selectedStudySets, setSelectedStudySets] = useState<number[]>([]);
+  const [selectedStudySet, setSelectedStudySet] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState('medium');
   const [timeLimit, setTimeLimit] = useState('30');
   const [questionType, setQuestionType] = useState('mcq');
@@ -82,10 +81,6 @@ export default function Exam() {
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  const toggleStudySet = (id: number) => {
-    setSelectedStudySets(prev => prev.includes(id) ? prev.filter(setId => setId !== id) : [...prev, id]);
-  };
-
   const callGemini = async (systemPrompt: string, userText: string): Promise<string> => {
     const res = await fetch('/api/gemini', {
       method: 'POST',
@@ -105,16 +100,7 @@ export default function Exam() {
     if (jsonArrayStart !== -1 && jsonArrayEnd !== -1) {
       cleanJson = cleanJson.substring(jsonArrayStart, jsonArrayEnd + 1);
     }
-    try {
-      return JSON.parse(cleanJson);
-    } catch (e) {
-      try {
-        // Fallback eval parser handles literal unescaped newlines/control chars effectively
-        return new Function("return " + cleanJson)();
-      } catch (err) {
-        throw new Error('Failed to parse AI format. Try generating again.');
-      }
-    }
+    return JSON.parse(cleanJson);
   };
 
   const parseJSONObjectResponse = (raw: string) => {
@@ -124,21 +110,13 @@ export default function Exam() {
     if (jsonObjectStart !== -1 && jsonObjectEnd !== -1) {
       cleanJson = cleanJson.substring(jsonObjectStart, jsonObjectEnd + 1);
     }
-    try {
-      return JSON.parse(cleanJson);
-    } catch (e) {
-      try {
-        return new Function("return " + cleanJson)();
-      } catch (err) {
-        throw new Error('Failed to parse AI format. Try generating again.');
-      }
-    }
+    return JSON.parse(cleanJson);
   };
 
   const generateExam = async () => {
-    if (selectedStudySets.length === 0) { alert('Please select at least one study set first!'); return; }
-    const studyMaterials = studyHistory.filter(s => selectedStudySets.includes(s.id)).map(s => s.parts[2]).join('\n\n---\n\n');
-    if (!studyMaterials) { alert('Selected study sets have no content.'); return; }
+    if (!selectedStudySet) { alert('Please select a study set first!'); return; }
+    const studySet = studyHistory.find(s => s.id === selectedStudySet);
+    if (!studySet) { alert('Study set not found.'); return; }
 
     setIsGeneratingExam(true);
     try {
@@ -154,10 +132,8 @@ Return ONLY a valid JSON array of objects with this EXACT structure (do not incl
   }
 ]
 
-CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using \\" and strictly avoid literal newline characters inside strings (use \\n instead).
-
 Study Material:
-${studyMaterials}`;
+${studySet.parts[2]}`;
 
         const raw = await callGemini(prompt, '');
         const jsonQuestions = parseJSONResponse(raw);
@@ -184,10 +160,8 @@ Return ONLY a valid JSON array of objects with this EXACT structure (do not incl
   }
 ]
 
-CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using \\" and strictly avoid literal newline characters inside strings (use \\n instead).
-
 Study Material:
-${studyMaterials}`;
+${studySet.parts[2]}`;
 
         const raw = await callGemini(prompt, '');
         const jsonQuestions = parseJSONResponse(raw);
@@ -214,10 +188,8 @@ Return ONLY a valid JSON array of objects with this EXACT structure (do not incl
   }
 ]
 
-CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using \\" and strictly avoid literal newline characters inside strings (use \\n instead).
-
 Study Material:
-${studyMaterials}`;
+${studySet.parts[2]}`;
 
         const raw = await callGemini(prompt, '');
         const jsonQuestions = parseJSONResponse(raw);
@@ -279,9 +251,7 @@ Return ONLY a valid JSON object with this EXACT structure (no markdown block mar
   "strengths": "what was correct, well-expressed, or showed good understanding",
   "improvements": "specific gaps, errors, or missing concepts",
   "studyTips": "concrete topics/concepts the student should review to improve"
-}
-
-CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using \\" and strictly avoid literal newline characters inside strings (use \\n instead).`;
+}`;
 
         try {
           const raw = await callGemini(prompt, '');
@@ -315,7 +285,7 @@ CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using 
     setMarkingResults([]);
   };
 
-  const saveExamToFolder = async () => {
+  const saveExamToFolder = () => {
     if (tier !== 'pro') { alert('Saving exams is a Pro feature. Upgrade to unlock!'); return; }
 
     const folders = safeParseJSON<any[]>('hz_folders', []);
@@ -325,35 +295,17 @@ CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using 
       examFolder = { id: `folder_exams_${Date.now()}`, name: 'Exams', emoji: '📝' };
       newFolders.push(examFolder);
       saveToStorage('hz_folders', newFolders);
-      if (user) {
-        try { await updateDoc(doc(db, 'profiles', user.uid), { folders: newFolders }); } catch(e){}
-      }
     }
 
-    const sourceTitles = studyHistory.filter(s => selectedStudySets.includes(s.id)).map(s => s.title).join(', ');
-
     const quizText = examQuestions.map((q: any, i: number) => {
-      const isCorrect = userAnswers[i] === q.answer;
-      const result = markingResults[i];
-      
-      let markdown = `### ${i + 1}. ${q.question}\n\n`;
       if (q.type === 'mcq') {
-         markdown += `**Your answer:** ${userAnswers[i] ? `${userAnswers[i]}. ${q.options[userAnswers[i].charCodeAt(0) - 65] || ''}` : 'Not answered'} ${isCorrect ? '✅' : '❌'}\n\n`;
-         if (!isCorrect) {
-             markdown += `**Correct answer:** ${q.answer}. ${q.options[q.answer.charCodeAt(0) - 65] || ''}\n\n`;
-         }
-      } else {
-         markdown += `**Score:** ${result?.score ?? 0}/${result?.maxScore ?? 10}\n\n`;
-         markdown += `**Your Answer:**\n> ${userAnswers[i] || '(no answer)'}\n\n`;
-         if (result) {
-             markdown += `**Strengths:** ${result.strengths}\n\n`;
-             markdown += `**Areas for Improvement:** ${result.improvements}\n\n`;
-             markdown += `**How to Prepare:** ${result.studyTips}\n\n`;
-         }
+        const opts = q.options.map((o: string, j: number) => `${String.fromCharCode(65 + j)}) ${o}`).join('\n');
+        return `Q: ${q.question}\n${opts}\nAns: ${q.answer}`;
       }
-      return markdown + `\n---\n`;
-    }).join('\n');
+      return `Q: ${q.question}\nStudent Answer: ${userAnswers[i] || '(no answer)'}\nScore: ${markingResults[i]?.score ?? '?'}/10`;
+    }).join('\n\n');
 
+    const sourceTitle = studyHistory.find(s => s.id === selectedStudySet)?.title || 'Study Set';
     const totalScore = questionType === 'mcq'
       ? score
       : markingResults.reduce((a, r) => a + r.score, 0);
@@ -362,17 +314,17 @@ CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using 
 
     const savedSet: StudySet = {
       id: Date.now(),
-      title: `Exam: ${sourceTitles}`.substring(0, 100) || 'General Exam',
+      title: `Exam: ${sourceTitle}`,
       date: new Date().toISOString(),
       summary: `Score: ${totalScore}/${totalMax} (${pct}%) — ${difficulty} difficulty, ${examQuestions.length} ${questionType} questions.`,
       flashcardCount: 0,
       quizCount: examQuestions.length,
       parts: [
-        `Exam: ${sourceTitles}`.substring(0, 100) || 'General Exam',
+        `Exam: ${sourceTitle}`,
         `Score: ${totalScore}/${totalMax} (${pct}%)`,
-        `## Exam Results\n\n**Score:** ${totalScore}/${totalMax} (${pct}%)\n**Type:** ${questionType}\n**Difficulty:** ${difficulty}\n**Questions:** ${examQuestions.length}\n**Date:** ${new Date().toLocaleDateString()}\n\n---\n\n${quizText}`,
+        `## Exam Results\n\n**Score:** ${totalScore}/${totalMax} (${pct}%)\n**Type:** ${questionType}\n**Difficulty:** ${difficulty}\n**Questions:** ${examQuestions.length}\n**Date:** ${new Date().toLocaleDateString()}`,
         '',
-        ''
+        quizText,
       ],
       podcast: '',
       chatCount: 0,
@@ -382,13 +334,6 @@ CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using 
     const history = safeParseJSON<any[]>('hz_study_history', []);
     saveToStorage('hz_study_history', [savedSet, ...history].slice(0, 50));
     setExamSaved(true);
-    
-    if (user && tier === 'pro') {
-      try {
-        await setDoc(doc(db, 'profiles', user.uid, 'study_sets', savedSet.id.toString()), { ...savedSet, userId: user.uid, syncedAt: serverTimestamp() });
-      } catch(e) {}
-    }
-    
     alert('Exam saved to the "Exams" folder in your Dashboard!');
   };
 
@@ -459,13 +404,13 @@ CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using 
 
               {/* Study Set */}
               <div className="glass-card p-6 dark:bg-gray-800 dark:border-gray-700">
-                <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><FileText className="w-5 h-5 text-green-500" /> Select Notes (Multiple)</h3>
+                <h3 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><FileText className="w-5 h-5 text-green-500" /> Select Notes</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                   {studyHistory.length === 0 ? (
                     <p className="text-sm text-gray-500 py-4 font-medium">No study sets yet. Create one in the Dashboard first!</p>
                   ) : studyHistory.map(set => (
-                    <label key={set.id} onClick={(e) => { e.preventDefault(); toggleStudySet(set.id); }} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition ${selectedStudySets.includes(set.id) ? 'bg-green-50 border-green-500 text-green-700 dark:bg-green-900/30 dark:border-green-500 dark:text-green-400' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
-                      <input type="checkbox" checked={selectedStudySets.includes(set.id)} readOnly className="accent-green-500 w-4 h-4 rounded border-gray-300" />
+                    <label key={set.id} onClick={() => setSelectedStudySet(set.id)} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition ${selectedStudySet === set.id ? 'bg-green-50 border-green-500 text-green-700 dark:bg-green-900/30 dark:border-green-500 dark:text-green-400' : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                      <input type="radio" name="exam_study_set" checked={selectedStudySet === set.id} onChange={() => setSelectedStudySet(set.id)} className="accent-green-500" />
                       <div className="flex-1">
                         <div className="font-bold text-gray-800 dark:text-gray-200 text-sm">{set.title}</div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(set.date).toLocaleDateString()}</div>
@@ -571,7 +516,7 @@ CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using 
               <div className="space-y-8 glass-card p-6 md:p-10 dark:bg-gray-800 dark:border-gray-700">
                 {examQuestions.map((q, i) => (
                   <div key={i} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 rounded-2xl">
-                    <h4 className="font-bold text-gray-900 dark:text-white mb-4" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i + 1}. ${q.question}`) }} />
+                    <h4 className="font-bold text-gray-900 dark:text-white mb-4">{i + 1}. {q.question}</h4>
 
                     {/* MCQ Options */}
                     {q.type === 'mcq' && (
@@ -579,9 +524,9 @@ CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using 
                         {q.options.map((opt: string, j: number) => {
                           const letter = String.fromCharCode(65 + j);
                           return (
-                            <label key={j} className="flex items-start gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                              <input type="radio" name={`exam_q_${i}`} value={letter} checked={userAnswers[i] === letter} onChange={() => setUserAnswers(prev => ({ ...prev, [i]: letter }))} className="accent-green-500 mt-1" />
-                              <span className="dark:text-gray-200" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`**${letter}.** ${opt}`) }} />
+                            <label key={j} className="flex items-center gap-3 p-3 border border-gray-200 dark:border-gray-700 rounded-xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                              <input type="radio" name={`exam_q_${i}`} value={letter} checked={userAnswers[i] === letter} onChange={() => setUserAnswers(prev => ({ ...prev, [i]: letter }))} className="accent-green-500" />
+                              <span className="dark:text-gray-200"><b>{letter}.</b> {opt}</span>
                             </label>
                           );
                         })}
@@ -606,6 +551,12 @@ CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using 
                     {/* Essay */}
                     {q.type === 'essay' && (
                       <div>
+                        {q.criteria && (
+                          <div className="mb-4 bg-blue-900/20 border border-blue-800/40 rounded-xl px-4 py-3">
+                            <p className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1">Marking Criteria</p>
+                            <p className="text-sm text-blue-300">{q.criteria}</p>
+                          </div>
+                        )}
                         <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Your Essay Response</label>
                         <textarea
                           value={userAnswers[i] || ''}
@@ -669,18 +620,12 @@ CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using 
                 const isCorrect = userAnswers[i] === q.answer;
                 return (
                   <div key={i} className={`glass-card p-5 dark:border-gray-700 border-l-4 ${isCorrect ? 'border-l-green-500' : 'border-l-red-500'}`}>
-                    <p className="font-bold text-white mb-2" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i + 1}. ${q.question}`) }} />
-                    <div className="text-sm space-y-2 mt-3">
-                      <div className={`p-3 rounded-lg ${isCorrect ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300' : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300'}`}>
-                        <span className="font-bold">Your answer: </span>
-                        <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(userAnswers[i] ? `${userAnswers[i]}. ${q.options[userAnswers[i].charCodeAt(0) - 65] || ''}` : 'Not answered') }} />
-                      </div>
-                      {!isCorrect && (
-                        <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300">
-                          <span className="font-bold">Correct answer: </span>
-                          <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${q.answer}. ${q.options[q.answer.charCodeAt(0) - 65] || ''}`) }} />
-                        </div>
-                      )}
+                    <p className="font-bold text-white mb-2">{i + 1}. {q.question}</p>
+                    <div className="text-sm space-y-1">
+                      <p className={isCorrect ? 'text-green-400 font-bold' : 'text-red-400'}>
+                        Your answer: {userAnswers[i] ? `${userAnswers[i]}. ${q.options[userAnswers[i].charCodeAt(0) - 65] || ''}` : 'Not answered'}
+                      </p>
+                      {!isCorrect && <p className="text-green-400 font-bold">Correct: {q.answer}. {q.options[q.answer.charCodeAt(0) - 65] || ''}</p>}
                     </div>
                   </div>
                 );
@@ -694,7 +639,7 @@ CRITICAL: Return ONLY valid JSON. Escape all double quotes inside strings using 
                 return (
                   <div key={i} className={`glass-card p-6 dark:border-gray-700 border-l-4 ${color === 'green' ? 'border-l-green-500' : color === 'yellow' ? 'border-l-yellow-500' : 'border-l-red-500'}`}>
                     <div className="flex items-start justify-between mb-3">
-                      <p className="font-bold text-white flex-1 mr-4" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i + 1}. ${q.question}`) }} />
+                      <p className="font-bold text-white flex-1 mr-4">{i + 1}. {q.question}</p>
                       {result && (
                         <span className={`shrink-0 text-lg font-extrabold px-3 py-1 rounded-full ${color === 'green' ? 'bg-green-900/30 text-green-400' : color === 'yellow' ? 'bg-yellow-900/30 text-yellow-400' : 'bg-red-900/30 text-red-400'}`}>
                           {result.score}/{result.maxScore}
