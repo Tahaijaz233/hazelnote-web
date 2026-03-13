@@ -582,17 +582,22 @@ function DashboardContent() {
       if ((stats.monthlySets[month]||0)>=2) return setGoProModalOpen(true);
     }
 
-    let finalContext = '';
-    if (voiceText) finalContext += '\n'+voiceText;
-
+    let ytUrl = '';
     if (inputMode==='link') {
       const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
       if (!urlInput?.value) return alert('Please paste a YouTube URL to begin.');
+      ytUrl = urlInput.value;
     } else if (inputMode==='pdf') {
       if (pdfFiles.length===0) return alert('Please upload a PDF to begin.');
     } else if (inputMode==='voice') {
       if (!voiceText.trim()) return alert('Please dictate or type notes to begin.');
     }
+
+    let finalContext = '';
+    if (voiceText) finalContext += '\n'+voiceText;
+
+    // Securely capture files synchronously before the background Promise detaches
+    const currentPdfFiles = [...pdfFiles];
 
     setBgGenActive(runInBackground);
     setBgGenDone(false);
@@ -600,6 +605,12 @@ function DashboardContent() {
     if (!runInBackground) {
       setIsLoading(true);
       setLoadingProgress(0);
+    }
+
+    // Clear UI state to allow user to start fresh
+    if (runInBackground) {
+      setPdfFiles([]);
+      setVoiceText('');
     }
 
     let progress = 0;
@@ -616,14 +627,15 @@ function DashboardContent() {
 
     try {
       if (inputMode==='link') {
-        const urlInput = document.getElementById('youtube-url-input') as HTMLInputElement;
-        const ytRes = await fetch('/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:urlInput.value})});
+        const ytRes = await fetch('/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:ytUrl})});
         const ytData = await ytRes.json();
         if (ytData.error) throw new Error(ytData.error);
         finalContext += '\n'+ytData.text;
       }
 
       const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===" on a new line. Do not bold the SPLIT text.
+
+CRITICAL: YOU MUST OUTPUT EXACTLY 4 "===SPLIT===" DIVIDERS. NO MORE, NO LESS.
 
 Section 1: SHORT TITLE (4-8 words max, DO NOT include labels like "Title:" or "Short Title:")
 ===SPLIT===
@@ -642,11 +654,9 @@ B) [Option B]
 C) [Option C]
 D) [Option D]
 Ans: [A/B/C/D]
-Exp: [Brief explanation of why this is correct]
+Exp: [Brief explanation of why this is correct]`;
 
-Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
-
-      const mainResult = await callLLM(mainPrompt,finalContext.substring(0,150000),pdfFiles);
+      const mainResult = await callLLM(mainPrompt,finalContext.substring(0,150000),currentPdfFiles);
       let parts = mainResult.split(/===SPLIT===/i).map((p:string)=>p.trim());
       while (parts.length<5) parts.push('Content generation incomplete.');
 
@@ -667,7 +677,8 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
         flashcardCount,quizCount,parts,podcast:cleanPodResult,chatCount:0,
       };
 
-      const newHistory = [studySet,...studyHistory].slice(0,50);
+      const currentHistory = safeParseJSON('hz_study_history', []);
+      const newHistory = [studySet,...currentHistory].slice(0,50);
       setStudyHistory(newHistory);
       saveToStorage('hz_study_history',newHistory);
       if (tier==='pro') await syncToFirebase(studySet);
@@ -680,8 +691,8 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       newStats.monthlySets[month] = (newStats.monthlySets[month]||0)+1;
       saveStatsAndFolders(newStats,folders);
 
-      setPdfFiles([]); setVoiceText('');
       if (!runInBackground) {
+        setPdfFiles([]); setVoiceText('');
         setIsLoading(false);
         loadStudySet(studySet);
       } else {
@@ -1094,7 +1105,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       <div className="max-w-3xl mx-auto space-y-8 pb-8">
         {questions.map((q,i)=>(
           <div key={i} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700 p-6 rounded-2xl">
-            <h4 className="font-bold text-gray-100 mb-4">{i+1}. {q.q}</h4>
+            <h4 className="font-bold text-gray-100 mb-4" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i + 1}. ${q.q}`) }} />
             <div className="space-y-2">
               {q.opts.map((opt,j)=>{
                 const letter = String.fromCharCode(65+j);
@@ -1109,8 +1120,8 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
                 }
                 return (
                   <label key={j} className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition ${btnClass}`} style={{pointerEvents:hasAnswered?'none':'auto'}}>
-                    <input type="radio" name={`quiz_q_${i}`} value={letter} checked={isSelected} onChange={()=>setUserAnswers(prev=>({...prev,[i]:letter}))} className="accent-green-500"/>
-                    <span className="text-gray-200"><b>{letter}.</b> {opt}</span>
+                    <input type="radio" name={`quiz_q_${i}`} value={letter} checked={isSelected} onChange={()=>setUserAnswers(prev=>({...prev,[i]:letter}))} className="accent-green-500 mt-0.5"/>
+                    <span className="text-gray-200" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`**${letter}.** ${opt}`) }} />
                   </label>
                 );
               })}
@@ -1118,7 +1129,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
             {userAnswers[i]&&(
               <div className={`mt-4 p-4 rounded-xl border ${userAnswers[i]===q.answer?'bg-green-900/20 border-green-800 text-green-300':'bg-red-900/20 border-red-800 text-red-300'}`}>
                 <p className="font-bold mb-1">{userAnswers[i]===q.answer?'Correct!':`Incorrect. Correct answer: ${q.answer}`}</p>
-                <p className="text-sm">{q.explanation||'No explanation provided.'}</p>
+                <p className="text-sm" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(q.explanation||'No explanation provided.') }} />
               </div>
             )}
           </div>
