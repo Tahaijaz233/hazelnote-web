@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { Providers } from './providers';
 
 export const metadata: Metadata = {
   title: 'HazelNote | AI-Powered Study Workspace',
@@ -19,7 +20,9 @@ export default function RootLayout({
       <head>
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
       </head>
-      <body className="antialiased bg-[#0F172A]">{children}</body>
+      <body className="antialiased bg-[#0F172A]">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
