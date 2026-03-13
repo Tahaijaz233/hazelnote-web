@@ -779,7 +779,7 @@ Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
       const newSet:StudySet = {
         ...currentStudySet,id:Date.now(),title:`${currentStudySet.title} (${lang})`,
         parts:newParts.length>=5?newParts:currentStudySet.parts,
-        podcast:newPodcastText?newPodcastText.trim():currentStudySet.podcast,date:new DatetoISOString(),
+        podcast:newPodcastText?newPodcastText.trim():currentStudySet.podcast,date:new Date().toISOString(),
       };
       clearInterval(interval); setTranslateProgress(100);
       setTimeout(()=>{
@@ -1751,4 +1751,4 @@ export default function DashboardPage() {
       <DashboardContent />
     </Suspense>
   );
-}s
+}
