@@ -8,14 +8,13 @@ export async function GET() {
     return NextResponse.json({ error: 'Server Configuration Error: Gemini API keys missing.' }, { status: 500 });
   }
 
-  // Expose ALL keys to the frontend for the multi-key fallback loop during massive file uploads & TTS
   return NextResponse.json({ apiKey: API_KEYS[0], apiKeys: API_KEYS });
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { systemPrompt, userText, audioBase64, audioMimeType } = body;
+    const { systemPrompt, userText, audioBase64, audioMimeType, responseFormat, useSearch } = body;
 
     const RAW_GEMINI_KEYS = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
     const API_KEYS = RAW_GEMINI_KEYS.split(',').map(k => k.trim()).filter(Boolean);
@@ -28,24 +27,29 @@ export async function POST(request: NextRequest) {
     let combinedText = systemPrompt || '';
     if (userText) combinedText += '\n\nCONTEXT:\n' + userText;
     
-    // Add text if present
     if (combinedText) contents[0].parts.push({ text: combinedText });
 
-    // Handle voice audio
     if (audioBase64 && audioMimeType) {
       contents[0].parts.push({
         inlineData: { mimeType: audioMimeType, data: audioBase64 }
       });
     }
 
-    const payload = {
+    const payload: any = {
       contents,
       generationConfig: { maxOutputTokens: 8192, temperature: 0.7 },
     };
 
+    if (responseFormat === 'json') {
+      payload.generationConfig.responseMimeType = "application/json";
+    }
+
+    if (useSearch) {
+      payload.tools = [{ google_search: {} }];
+    }
+
     let lastErrorMsg = '';
 
-    // MULTI-KEY FALLBACK LOOP
     for (const apiKey of API_KEYS) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
@@ -61,17 +65,14 @@ export async function POST(request: NextRequest) {
           const errMsg = data.error?.message || 'Gemini API Error';
           lastErrorMsg = errMsg;
           
-          // Check if error is due to rate limiting or quota
           if (response.status === 429 || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('exceeded')) {
             console.warn(`Gemini API Key hit quota limit. Trying next key...`);
-            continue; // Skip to the next key in the array
+            continue;
           }
           
-          // For other immediate failures (like bad requests), throw right away
           return NextResponse.json({ error: errMsg }, { status: response.status });
         }
 
-        // Success! Return the result.
         return NextResponse.json({ result: data.candidates?.[0]?.content?.parts?.[0]?.text });
 
       } catch (err: any) {
@@ -81,7 +82,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // If the loop finishes without returning, ALL keys have failed
     return NextResponse.json(
       { error: `All Gemini API keys exhausted. Last error: ${lastErrorMsg}` }, 
       { status: 429 }
