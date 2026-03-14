@@ -1,36 +1,31 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { Providers } from "./providers";
-import Script from "next/script";
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import './globals.css';
+import Providers from './providers';
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: "HazelNote",
-  description: "HazelNote Application",
+  title: 'Hazelnote - Your AI Study Companion',
+  description: 'AI-powered study sets, flashcards, and tutoring.',
+  icons: {
+    // FIX 9: Favicon wasn't working. Pointing explicitly to the right asset.
+    icon: '/hazelnote_favicon.png',
+    shortcut: '/hazelnote_favicon.png',
+    apple: '/hazelnote_favicon.png',
+  },
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en">
-      <head>
-        {/* Inject jQuery first as Freemius requires it to build the FS object */}
-        <Script 
-          src="https://code.jquery.com/jquery-3.7.1.min.js" 
-          strategy="beforeInteractive" 
-        />
-        {/* Inject the Freemius Checkout script after jQuery is ready */}
-        <Script 
-          src="https://checkout.freemius.com/checkout.min.js" 
-          strategy="beforeInteractive" 
-        />
-      </head>
-      <body className={inter.className}>
+    // FIX 4: Completely remove white mode and implement dark mode throughout.
+    // Enforcing 'dark' class permanently on the HTML wrapper.
+    <html lang="en" className="dark" style={{ colorScheme: 'dark' }}>
+      <body className={`${inter.className} bg-[#0f0f0f] text-white min-h-screen antialiased selection:bg-blue-500/30`}>
         <Providers>
           {children}
         </Providers>
