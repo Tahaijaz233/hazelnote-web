@@ -2,26 +2,88 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import Script from 'next/script';
 import { Check } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+
+declare global {
+  interface Window {
+    FS: any;
+  }
+}
 
 export default function Pricing() {
+  const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [isPro, setIsPro] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [billing, setBilling] = useState<'monthly' | 'annual'>('monthly');
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsLoggedIn(!!user);
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      setIsLoggedIn(!!u);
+      setUser(u);
+      if (u) {
+        const profileRef = doc(db, 'profiles', u.uid);
+        const snap = await getDoc(profileRef);
+        if (snap.exists() && snap.data().is_pro) {
+          setIsPro(true);
+        }
+      }
     });
     return () => unsubscribe();
   }, []);
 
-  const proPrice = billing === 'annual' ? '$5.10' : '$6';
+  const openCheckout = () => {
+    if (!user) {
+      alert("Please log in or create an account to upgrade to Pro.");
+      router.push('/login');
+      return;
+    }
+
+    if (!window.FS) {
+      alert("Checkout SDK is still loading. Please try again in a moment.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const handler = window.FS.Checkout.configure({
+        plugin_id: process.env.NEXT_PUBLIC_FREEMIUS_PRODUCT_ID,
+        public_key: process.env.NEXT_PUBLIC_FREEMIUS_PUBLIC_KEY,
+        image: '/hazelnote_logo.png',
+      });
+
+      handler.open({
+        name: 'HazelNote Pro',
+        plan_id: process.env.NEXT_PUBLIC_FREEMIUS_PLAN_ID,
+        billing_cycle: billing,
+        user_email: user.email,
+        success: function (response: any) {
+          alert("Payment successful! Welcome to HazelNote Pro.");
+          router.push('/dashboard');
+        }
+      });
+    } catch (err) {
+      console.error("Freemius Checkout Error:", err);
+      alert("Failed to load checkout. Please check your configuration.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const proPrice = billing === 'annual' ? '$5.10' : '$5';
   const proPeriod = billing === 'annual' ? '/mo (billed annually)' : '/mo';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0F172A] to-[#1E293B]">
+      <Script src="https://checkout.freemius.com/checkout.min.js" strategy="lazyOnload" />
+
       <nav className="fixed top-4 left-1/2 transform -translate-x-1/2 w-[95%] max-w-7xl z-50 bg-[#0F172A]/70 backdrop-blur-xl border border-gray-800 rounded-full shadow-2xl">
         <div className="px-6 py-3">
           <div className="flex items-center justify-between">
@@ -97,7 +159,21 @@ export default function Pricing() {
                 <span className="text-5xl font-extrabold text-white">{proPrice}</span>
                 <span className="text-gray-300 text-sm">{proPeriod}</span>
               </div>
-              <Link href="/login/" className="block w-full py-3 px-6 text-center btn-primary text-white font-bold rounded-xl mb-8">Upgrade to Pro</Link>
+              
+              {isPro ? (
+                <button disabled className="block w-full py-3 px-6 text-center btn-primary text-white font-bold rounded-xl mb-8 opacity-70 cursor-not-allowed">
+                  You are on the Pro Plan
+                </button>
+              ) : (
+                <button 
+                  onClick={openCheckout}
+                  disabled={loading}
+                  className="block w-full py-3 px-6 text-center btn-primary text-white font-bold rounded-xl mb-8 transition"
+                >
+                  {loading ? 'Loading...' : 'Upgrade to Pro'}
+                </button>
+              )}
+
               <div className="space-y-4">
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white font-semibold">Unlimited study sets</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">PDF upload (up to 100MB)</span></div>
