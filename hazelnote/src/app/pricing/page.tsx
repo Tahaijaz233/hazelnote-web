@@ -77,7 +77,8 @@ export default function Pricing() {
     }
   };
 
-  const proPrice = billing === 'annual' ? '$5.10' : '$5';
+  // FIX: Updated the annual billing price to $4.25
+  const proPrice = billing === 'annual' ? '$4.25' : '$5';
   const proPeriod = billing === 'annual' ? '/mo (billed annually)' : '/mo';
 
   return (
@@ -147,8 +148,9 @@ export default function Pricing() {
               <div className="space-y-4">
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">2 study sets per month</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">PDF upload (up to 10MB)</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">Max 3 AI Tutor chats per set</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">Standard Flashcards & Quizzes</span></div>
+                {/* FIX: Updated Free limits to 5 flashcards/quizzes and basic chat */}
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">Max 5 Flashcards & 5 Quiz questions</span></div>
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">Basic Professor Hazel Chat</span></div>
               </div>
             </div>
             
@@ -177,9 +179,10 @@ export default function Pricing() {
               <div className="space-y-4">
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white font-semibold">Unlimited study sets</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">PDF upload (up to 100MB)</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Unlimited AI Tutor chats</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">AI Podcasts & Translation</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Generate extra flashcards & quizzes</span></div>
+                {/* FIX: Updated Pro limits accurately to what was requested */}
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">10 Messages/Day with Professor Hazel</span></div>
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">High-quality Voice Podcasts</span></div>
+                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Unlimited Flashcards & Quizzes</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Advanced Note Editing & Add Context</span></div>
                 <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Sync Across Devices</span></div>
               </div>
