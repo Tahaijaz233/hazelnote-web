@@ -14,7 +14,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { systemPrompt, userText, audioBase64, audioMimeType, responseFormat, useSearch } = body;
+    
+    // FIXED: Added voiceName to the destructured body to allow dynamic voice selection
+    const { systemPrompt, userText, audioBase64, audioMimeType, responseFormat, useSearch, voiceName } = body;
 
     const RAW_GEMINI_KEYS = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || '';
     const API_KEYS = RAW_GEMINI_KEYS.split(',').map(k => k.trim()).filter(Boolean);
@@ -29,23 +31,13 @@ export async function POST(request: NextRequest) {
     
     if (combinedText) contents[0].parts.push({ text: combinedText });
 
-    if (audioBase64 && audioMimeType) {
+    if (audioBase64) {
       contents[0].parts.push({
-        inlineData: { mimeType: audioMimeType, data: audioBase64 }
+        inlineData: {
+          data: audioBase64,
+          mimeType: audioMimeType || 'audio/wav'
+        }
       });
-    }
-
-    const payload: any = {
-      contents,
-      generationConfig: { maxOutputTokens: 8192, temperature: 0.7 },
-    };
-
-    if (responseFormat === 'json') {
-      payload.generationConfig.responseMimeType = "application/json";
-    }
-
-    if (useSearch) {
-      payload.tools = [{ google_search: {} }];
     }
 
     let lastErrorMsg = '';
@@ -53,6 +45,29 @@ export async function POST(request: NextRequest) {
     for (const apiKey of API_KEYS) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        
+        const payload: any = {
+          contents,
+        };
+
+        if (useSearch) {
+          payload.tools = [{ "google_search": {} }];
+        }
+
+        // FIXED: Dynamically apply the selected voiceName, falling back to "Aoede" if none is provided
+        if (responseFormat === 'audio') {
+          payload.generationConfig = {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: voiceName || "Aoede" 
+                }
+              }
+            }
+          };
+        }
+
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -73,7 +88,12 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: errMsg }, { status: response.status });
         }
 
-        return NextResponse.json({ result: data.candidates?.[0]?.content?.parts?.[0]?.text });
+        const responsePart = data.candidates?.[0]?.content?.parts?.[0];
+        
+        return NextResponse.json({ 
+          result: responsePart?.text,
+          inlineData: responsePart?.inlineData // Passes back the audio buffer if generated
+        });
 
       } catch (err: any) {
         lastErrorMsg = err.message;
@@ -97,7 +117,7 @@ export async function OPTIONS() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
 }
