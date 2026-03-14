@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard, PlusCircle, ClipboardList, UserCircle, HelpCircle,
-  Menu, X, Activity, Settings, CreditCard, AlertTriangle, LogOut, Trash2, KeyRound, Eye, EyeOff,
+  Menu, X, Activity, Settings, CreditCard, AlertTriangle, LogOut, Trash2, KeyRound, Eye, EyeOff, Loader2
 } from 'lucide-react';
 import {
   onAuthStateChanged, signOut, deleteUser,
@@ -33,6 +33,9 @@ export default function Profile() {
   const [showCurrentPw, setShowCurrentPw] = useState(false);
   const [showNewPw, setShowNewPw] = useState(false);
   const [isEmailUser, setIsEmailUser] = useState(false);
+  
+  // Billing portal state
+  const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -46,7 +49,7 @@ export default function Profile() {
         if (snap.exists()) {
           const p = snap.data();
           setProfile(p);
-          setTier(p.is_pro ? 'pro' : 'free');
+          setTier(p.is_pro && !p.fs_is_cancelled ? 'pro' : 'free'); // Keep free if cancelled and expired
           if (p.stats) setStats(p.stats);
         }
       }
@@ -120,16 +123,41 @@ export default function Profile() {
     setPwLoading(false);
   };
 
-  // --- Subscription Handlers ---
+  // --- Secure Subscription Handlers ---
   const handleManageBilling = async () => {
-    // TODO: Connect to Next.js API route that generates Freemius portal link
-    alert("This will open the secure Freemius Customer Portal where you can manage your billing details, update your card, and view invoices.");
+    if (!user) return;
+    setPortalLoading(true);
+    try {
+      // Get Firebase Auth token to securely prove identity to our backend
+      const token = await user.getIdToken();
+      
+      const res = await fetch('/api/freemius/portal', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await res.json();
+      
+      if (data.url) {
+        // Open the magic link in a new tab!
+        window.open(data.url, '_blank');
+      } else {
+        alert(data.error || "Could not load billing portal. Please contact support.");
+      }
+    } catch (e) {
+      console.error("Billing Portal Error:", e);
+      alert("Error connecting to billing portal.");
+    } finally {
+      setPortalLoading(false);
+    }
   };
 
   const handleCancelSubscription = async () => {
-    if (confirm("Are you sure you want to cancel your subscription? You will lose access to Pro features at the end of your billing cycle.")) {
-      // TODO: Call backend API to cancel subscription via Freemius SDK
-      alert("Subscription cancellation flow triggered. (Freemius integration pending)");
+    if (confirm("To cancel your subscription, please log into your billing portal. Do you want to proceed?")) {
+      await handleManageBilling();
     }
   };
 
@@ -188,9 +216,14 @@ export default function Profile() {
               <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">{user?.displayName || 'My Profile'}</h2>
               {user?.uid && <div className="text-xs text-gray-500 mt-1 font-mono tracking-wide">ID: {user.uid}</div>}
               <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs font-bold bg-green-100 text-green-700 px-3 py-1 rounded-full uppercase tracking-wider border border-green-200">
+                <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider border ${tier === 'pro' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'}`}>
                   {tier === 'pro' ? 'Pro Plan' : 'Free Plan'}
                 </span>
+                {profile?.fs_is_cancelled && tier === 'pro' && (
+                  <span className="text-xs font-bold bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full uppercase tracking-wider border border-yellow-200">
+                    Cancels Soon
+                  </span>
+                )}
               </div>
             </div>
           </header>
@@ -302,7 +335,9 @@ export default function Profile() {
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Renewal Date</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">
+                        {profile?.fs_is_cancelled ? 'Expires On' : 'Renewal Date'}
+                      </span>
                       <span className="font-extrabold text-gray-900 dark:text-white">
                         {profile?.fs_renewal_date ? new Date(profile.fs_renewal_date).toLocaleDateString() : 'Upcoming'}
                       </span>
@@ -312,16 +347,21 @@ export default function Profile() {
                   <div className="flex flex-col sm:flex-row gap-3">
                     <button 
                       onClick={handleManageBilling} 
-                      className="btn-primary flex-1 py-3.5 rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition text-center flex items-center justify-center gap-2"
+                      disabled={portalLoading}
+                      className="btn-primary flex-1 py-3.5 rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition text-center flex items-center justify-center gap-2 disabled:opacity-70 disabled:hover:scale-100"
                     >
-                      <CreditCard className="w-4 h-4"/> Manage Billing
+                      {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4"/>} 
+                      {portalLoading ? 'Securing Link...' : 'Manage Billing'}
                     </button>
-                    <button 
-                      onClick={handleCancelSubscription} 
-                      className="bg-gray-200 dark:bg-gray-700/50 hover:bg-red-100 dark:hover:bg-red-900/40 text-gray-800 dark:text-gray-200 hover:text-red-600 dark:hover:text-red-400 flex-1 py-3.5 rounded-xl font-bold shadow-md hover:shadow-lg hover:scale-[1.02] transition text-center flex items-center justify-center gap-2 border border-transparent hover:border-red-200 dark:hover:border-red-800"
-                    >
-                      <X className="w-4 h-4"/> Cancel Subscription
-                    </button>
+                    {!profile?.fs_is_cancelled && (
+                      <button 
+                        onClick={handleCancelSubscription} 
+                        disabled={portalLoading}
+                        className="bg-gray-200 dark:bg-gray-700/50 hover:bg-red-100 dark:hover:bg-red-900/40 text-gray-800 dark:text-gray-200 hover:text-red-600 dark:hover:text-red-400 flex-1 py-3.5 rounded-xl font-bold shadow-md hover:shadow-lg hover:scale-[1.02] transition text-center flex items-center justify-center gap-2 border border-transparent hover:border-red-200 dark:hover:border-red-800 disabled:opacity-50"
+                      >
+                        <X className="w-4 h-4"/> Cancel Subscription
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
