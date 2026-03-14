@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/response';
 import crypto from 'crypto';
-import { adminDb, adminAuth } from '@/lib/firebase-admin';
+import { adminDb, adminAuth } from '@/lib/firebase-admin'; // Ensure you have firebase-admin configured here
 
 export async function POST(req: Request) {
   try {
-    // 1. Verify the user is logged into HazelNote
+    // 1. Verify the user is logged into HazelNote via Firebase token
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -19,7 +19,9 @@ export async function POST(req: Request) {
     const fsUserId = userDoc.data()?.fs_user_id;
 
     if (!fsUserId) {
-      return NextResponse.json({ error: 'No Freemius User ID found. User may not have an active subscription.' }, { status: 400 });
+      return NextResponse.json({ 
+        error: 'No active subscription found. Please ensure you have purchased Pro.' 
+      }, { status: 400 });
     }
 
     // 3. Prepare the Freemius API Request
@@ -28,7 +30,7 @@ export async function POST(req: Request) {
     const secretKey = process.env.FREEMIUS_SECRET_KEY;
 
     if (!pluginId || !publicKey || !secretKey) {
-      throw new Error("Missing Freemius API keys");
+      throw new Error("Missing Freemius API keys in environment variables");
     }
 
     const method = 'GET';
@@ -54,7 +56,7 @@ export async function POST(req: Request) {
 
     if (!freemiusRes.ok) {
       console.error("Freemius API Error:", freemiusData);
-      return NextResponse.json({ error: 'Failed to generate login URL' }, { status: 500 });
+      return NextResponse.json({ error: 'Failed to generate secure login URL' }, { status: 500 });
     }
 
     // 6. Send the generated magic link back to the frontend
