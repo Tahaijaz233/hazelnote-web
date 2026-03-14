@@ -27,10 +27,64 @@ const TTS_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Aoede', 'Zephyr', 'Leda
 
 const safeParseJSON = (key: string, fallback: any) => { if (typeof window === 'undefined') return fallback; try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : fallback; } catch { return fallback; } };
 const saveToStorage = (key: string, value: any) => { if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value)); };
-const renderMarkdownWithMath = (text: string) => text.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br/>');
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 const base64ToArrayBuffer = (base: string) => { const str = window.atob(base); const bytes = new Uint8Array(str.length); for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i); return bytes.buffer; };
 const pcmToWav = (pcm: ArrayBuffer, rate: number) => { const n=1,b=rate*n*2,a=n*2,buf=new ArrayBuffer(44+pcm.byteLength),v=new DataView(buf),w=(o:number,s:string)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};w(0,'RIFF');v.setUint32(4,36+pcm.byteLength,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,n,true);v.setUint32(24,rate,true);v.setUint32(28,b,true);v.setUint16(32,a,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,pcm.byteLength,true);new Uint8Array(buf,44).set(new Uint8Array(pcm));return new Blob([v],{type:'audio/wav'});};
+
+const renderMarkdownWithMath = (text: string) => {
+  if (!text) return '';
+  let html = text;
+
+  // 1. Strip markdown code block wrappers if they slipped through
+  html = html.replace(/^```[a-zA-Z]*\n/gm, '').replace(/```$/gm, '');
+
+  // 2. Headers
+  html = html.replace(/^### (.*?)$/gm, '<h3 class="text-xl font-bold mt-6 mb-3 text-white">$1</h3>');
+  html = html.replace(/^## (.*?)$/gm, '<h2 class="text-2xl font-bold mt-8 mb-4 text-white">$1</h2>');
+  html = html.replace(/^# (.*?)$/gm, '<h1 class="text-3xl font-extrabold mt-10 mb-5 text-white">$1</h1>');
+
+  // 3. Bold
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>');
+
+  // 4. Tables
+  html = html.replace(/^\|(.+)\|\s*$/gm, (match, content) => {
+    const cells = content.split('|').map((c: string) => c.trim());
+    // Skip separator rows
+    if (cells.every((c: string) => c.match(/^:?-+:?$/) || c === '')) return '';
+    const cellHtml = cells.map((c: string) => `<td class="border border-gray-600 px-4 py-2">${c}</td>`).join('');
+    return `<tr>${cellHtml}</tr>`;
+  });
+  // Group adjacent rows into a table
+  html = html.replace(/(<tr>.*?<\/tr>(?:\s*<tr>.*?<\/tr>)*)/gs, '<div class="overflow-x-auto my-6"><table class="w-full border-collapse border border-gray-600 bg-gray-800/30 text-sm text-left"><tbody>$1</tbody></table></div>');
+
+  // 5. Unordered Lists
+  html = html.replace(/^[\*\-] (.*?)$/gm, '<li class="ml-6 list-disc mb-1 ul-item text-gray-200">$1</li>');
+  html = html.replace(/(<li[^>]*ul-item[^>]*>.*?<\/li>(?:\s*<li[^>]*ul-item[^>]*>.*?<\/li>)*)/gs, '<ul class="my-4">$1</ul>');
+
+  // 6. Ordered Lists
+  html = html.replace(/^\d+\. (.*?)$/gm, '<li class="ml-6 list-decimal mb-1 ol-item text-gray-200">$1</li>');
+  html = html.replace(/(<li[^>]*ol-item[^>]*>.*?<\/li>(?:\s*<li[^>]*ol-item[^>]*>.*?<\/li>)*)/gs, '<ol class="my-4">$1</ol>');
+
+  // 7. Newlines
+  html = html.replace(/\n/g, '<br/>');
+
+  // 8. Cleanup <br/> around block tags
+  const blockTags = ['h1', 'h2', 'h3', 'ul', 'ol', 'li', 'div', 'table', 'tbody', 'tr', 'td'];
+  blockTags.forEach(tag => {
+    const regexEnd = new RegExp(`(<\\/${tag}>)<br\\/>`, 'gi');
+    html = html.replace(regexEnd, '$1');
+    const regexStart = new RegExp(`<br\\/>(<${tag}[^>]*>)`, 'gi');
+    html = html.replace(regexStart, '$1');
+  });
+
+  // 9. Extra cleanup for common artifacts
+  html = html.replace(/<\/div><br\/>/g, '</div>');
+  html = html.replace(/<\/ul><br\/>/g, '</ul>');
+  html = html.replace(/<\/ol><br\/>/g, '</ol>');
+  html = html.replace(/<\/h[1-3]><br\/>/g, (match) => match.replace('<br/>', ''));
+
+  return html;
+};
 
 const NoteEditorToolbar = ({ onFormat, onInsertHtml, editorRangeRef }: any) => {
   const [activePopup, setActivePopup] = useState<string | null>(null);
