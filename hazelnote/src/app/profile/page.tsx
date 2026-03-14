@@ -120,6 +120,19 @@ export default function Profile() {
     setPwLoading(false);
   };
 
+  // --- Subscription Handlers ---
+  const handleManageBilling = async () => {
+    // TODO: Connect to Next.js API route that generates Freemius portal link
+    alert("This will open the secure Freemius Customer Portal where you can manage your billing details, update your card, and view invoices.");
+  };
+
+  const handleCancelSubscription = async () => {
+    if (confirm("Are you sure you want to cancel your subscription? You will lose access to Pro features at the end of your billing cycle.")) {
+      // TODO: Call backend API to cancel subscription via Freemius SDK
+      alert("Subscription cancellation flow triggered. (Freemius integration pending)");
+    }
+  };
+
   const month = getCurrentMonth();
   const monthlyCount = stats.monthlySets?.[month] || 0;
   const usagePercentage = tier === 'free' ? Math.min((monthlyCount / 2) * 100, 100) : 100;
@@ -279,11 +292,45 @@ export default function Profile() {
               <h3 className="text-xl font-extrabold text-gray-900 dark:text-white mb-4 text-left flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-green-500" /> Subscription & Billing
               </h3>
-              <div>
-                <Link href="/pricing/" className="btn-primary px-6 py-3 inline-block rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition">
-                  View Pricing Plans
-                </Link>
-              </div>
+              {tier === 'pro' ? (
+                <div className="space-y-4">
+                  <div className="bg-gray-100 dark:bg-gray-900/50 rounded-xl p-5 border border-gray-200 dark:border-gray-700">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Plan Type</span>
+                      <span className="font-extrabold text-gray-900 dark:text-white capitalize">
+                        {profile?.fs_plan_type || 'Monthly'} Pro
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider">Renewal Date</span>
+                      <span className="font-extrabold text-gray-900 dark:text-white">
+                        {profile?.fs_renewal_date ? new Date(profile.fs_renewal_date).toLocaleDateString() : 'Upcoming'}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button 
+                      onClick={handleManageBilling} 
+                      className="btn-primary flex-1 py-3.5 rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition text-center flex items-center justify-center gap-2"
+                    >
+                      <CreditCard className="w-4 h-4"/> Manage Billing
+                    </button>
+                    <button 
+                      onClick={handleCancelSubscription} 
+                      className="bg-gray-200 dark:bg-gray-700/50 hover:bg-red-100 dark:hover:bg-red-900/40 text-gray-800 dark:text-gray-200 hover:text-red-600 dark:hover:text-red-400 flex-1 py-3.5 rounded-xl font-bold shadow-md hover:shadow-lg hover:scale-[1.02] transition text-center flex items-center justify-center gap-2 border border-transparent hover:border-red-200 dark:hover:border-red-800"
+                    >
+                      <X className="w-4 h-4"/> Cancel Subscription
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <Link href="/pricing/" className="btn-primary px-6 py-3 inline-block rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition">
+                    View Pricing Plans
+                  </Link>
+                </div>
+              )}
             </section>
 
             <div className="glass-card p-6 border border-red-100 bg-red-50/10 dark:bg-gray-800 dark:border-red-900">
