@@ -47,8 +47,20 @@ export default function Login() {
     });
   };
 
+  // Helper to completely purge any previous account data to avoid leaks
+  const clearLocalData = () => {
+    localStorage.removeItem('hz_study_history');
+    localStorage.removeItem('hz_stats');
+    localStorage.removeItem('hz_folders');
+    localStorage.removeItem('hz_prof_chats');
+    if (typeof indexedDB !== 'undefined') {
+      indexedDB.deleteDatabase('HazelNoteDB');
+    }
+  };
+
   const handleGoogleSignIn = async () => {
     setLoading(true);
+    clearLocalData(); // Wipe cache before proceeding with authentication
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
@@ -74,6 +86,7 @@ export default function Login() {
       return;
     }
     setLoading(true);
+    clearLocalData(); // Wipe cache before proceeding with authentication
     try {
       await signInWithEmailAndPassword(auth, email, password);
       showAlert('Signed in! Redirecting...', 'ok');
@@ -94,6 +107,7 @@ export default function Login() {
       return;
     }
     setLoading(true);
+    clearLocalData(); // Wipe cache before proceeding with authentication
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name });
