@@ -128,7 +128,8 @@ export function pcmToWav(pcmData: ArrayBuffer, sampleRate = 24000): Blob {
 // --- IndexedDB for Audio Caching ---
 export async function saveAudioToDB(id: string, base64: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('HazelNoteDB', 1);
+    // Increased version to force an upgrade trigger
+    const request = indexedDB.open('HazelNoteDB', 2);
     request.onupgradeneeded = (e: any) => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('podcasts')) {
@@ -137,11 +138,15 @@ export async function saveAudioToDB(id: string, base64: string): Promise<void> {
     };
     request.onsuccess = (e: any) => {
       const db = e.target.result;
+      if (!db.objectStoreNames.contains('podcasts')) {
+        db.close();
+        return reject(new Error('Object store not found'));
+      }
       const tx = db.transaction('podcasts', 'readwrite');
       const store = tx.objectStore('podcasts');
       store.put({ id, base64 });
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
     };
     request.onerror = () => reject(request.error);
   });
@@ -149,7 +154,7 @@ export async function saveAudioToDB(id: string, base64: string): Promise<void> {
 
 export async function getAudioFromDB(id: string): Promise<string | null> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('HazelNoteDB', 1);
+    const request = indexedDB.open('HazelNoteDB', 2);
     request.onupgradeneeded = (e: any) => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('podcasts')) {
@@ -158,12 +163,15 @@ export async function getAudioFromDB(id: string): Promise<string | null> {
     };
     request.onsuccess = (e: any) => {
       const db = e.target.result;
-      if (!db.objectStoreNames.contains('podcasts')) return resolve(null);
+      if (!db.objectStoreNames.contains('podcasts')) {
+        db.close();
+        return resolve(null);
+      }
       const tx = db.transaction('podcasts', 'readonly');
       const store = tx.objectStore('podcasts');
       const getReq = store.get(id);
-      getReq.onsuccess = () => resolve(getReq.result ? getReq.result.base64 : null);
-      getReq.onerror = () => reject(getReq.error);
+      getReq.onsuccess = () => { db.close(); resolve(getReq.result ? getReq.result.base64 : null); };
+      getReq.onerror = () => { db.close(); reject(getReq.error); };
     };
     request.onerror = () => reject(request.error);
   });
@@ -171,14 +179,25 @@ export async function getAudioFromDB(id: string): Promise<string | null> {
 
 export async function deleteAudioFromDB(id: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('HazelNoteDB', 1);
+    const request = indexedDB.open('HazelNoteDB', 2);
+    request.onupgradeneeded = (e: any) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('podcasts')) {
+        db.createObjectStore('podcasts', { keyPath: 'id' });
+      }
+    };
     request.onsuccess = (e: any) => {
       const db = e.target.result;
-      if (!db.objectStoreNames.contains('podcasts')) return resolve();
+      if (!db.objectStoreNames.contains('podcasts')) {
+        db.close();
+        return resolve();
+      }
       const tx = db.transaction('podcasts', 'readwrite');
       const store = tx.objectStore('podcasts');
       store.delete(id);
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
     };
+    request.onerror = () => reject(request.error);
   });
 }
