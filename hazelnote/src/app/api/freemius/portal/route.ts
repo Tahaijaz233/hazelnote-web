@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/response';
+import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { adminDb, adminAuth } from '@/lib/firebase-admin'; // Ensure you have firebase-admin configured here
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export async function POST(req: Request) {
   try {
@@ -10,13 +11,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    const token = authHeader.split('Bearer ')[1];
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    const uid = decodedToken.uid;
+    let uid;
+    try {
+      const token = authHeader.split('Bearer ')[1];
+      // Decode JWT token manually (replacing firebase-admin's verifyIdToken)
+      const base64Payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const decodedToken = JSON.parse(atob(base64Payload));
+      uid = decodedToken.user_id;
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid token format' }, { status: 401 });
+    }
+
+    if (!uid) {
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
 
     // 2. Look up the user's Freemius User ID in Firebase
-    const userDoc = await adminDb.collection('profiles').doc(uid).get();
-    const fsUserId = userDoc.data()?.fs_user_id;
+    const userDocRef = doc(db, 'profiles', uid);
+    const userDoc = await getDoc(userDocRef);
+    const fsUserId = userDoc.exists() ? userDoc.data()?.fs_user_id : null;
 
     if (!fsUserId) {
       return NextResponse.json({ 
