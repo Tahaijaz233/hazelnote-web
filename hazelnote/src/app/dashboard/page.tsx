@@ -8,7 +8,7 @@ import {
   Underline, Type, ImageIcon, FunctionSquare, Palette, Save, RefreshCw, FastForward,
   Rewind, MessageCircleQuestion, Highlighter, Table as TableIcon, StopCircle, ChevronDown,
   Edit2, FolderPlus, Network, Paperclip, Check, List, ListOrdered, AlignLeft, AlignCenter,
-  AlignRight, Bot, Search,
+  AlignRight, Bot, Search, Volume2
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs } from 'firebase/firestore';
@@ -22,6 +22,8 @@ import { saveAudioToDB, getAudioFromDB, deleteAudioFromDB } from '@/lib/utils';
 interface StudySet { id: number; title: string; date: string; summary: string; flashcardCount: number; quizCount: number; parts: string[]; podcast: string; chatCount: number; folderId?: string; }
 interface UserStats { streak: number; notes: number; lastDate: string | null; monthlySets: Record<string, number>; }
 interface Folder { id: string; name: string; emoji: string; }
+
+const TTS_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Aoede', 'Zephyr', 'Leda', 'Orus'];
 
 const safeParseJSON = (key: string, fallback: any) => { if (typeof window === 'undefined') return fallback; try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : fallback; } catch { return fallback; } };
 const saveToStorage = (key: string, value: any) => { if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value)); };
@@ -284,6 +286,7 @@ function DashboardContent() {
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [selectedVoice, setSelectedVoice] = useState('Kore');
   const audioRef = useRef<HTMLAudioElement|null>(null);
 
   const [askModalOpen, setAskModalOpen] = useState(false);
@@ -324,6 +327,7 @@ function DashboardContent() {
     setStudyHistory(safeParseJSON('hz_study_history',[]));
     setStats(safeParseJSON('hz_stats',{streak:0,notes:0,lastDate:null,monthlySets:{}}));
     setFolders(safeParseJSON('hz_folders',[]));
+    setSelectedVoice(safeParseJSON('hz_voice', 'Kore'));
     return () => unsubscribe();
   }, []);
 
@@ -351,6 +355,17 @@ function DashboardContent() {
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = playbackRate;
   }, [playbackRate]);
+
+  const handleVoiceChange = (voice: string) => {
+    setSelectedVoice(voice);
+    saveToStorage('hz_voice', voice);
+    setAudioUrl(null);
+    setIsPlaying(false);
+    if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+    }
+  };
 
   const handleEditorSelection = () => {
     const sel = window.getSelection();
@@ -534,7 +549,13 @@ function DashboardContent() {
     if (!confirm('Are you sure you want to delete this study set?')) return;
     const newHistory = studyHistory.filter(s=>s.id!==setId);
     setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
+    
+    // Cleanup generated audio cache
+    for (const v of TTS_VOICES) {
+      try { await deleteAudioFromDB(`podcast_${setId}_${v}`); } catch(e){}
+    }
     try { await deleteAudioFromDB(`podcast_${setId}`); } catch(e){}
+
     if (user&&tier==='pro') { try { await deleteDoc(doc(db,'profiles',user.uid,'study_sets',setId.toString())); } catch(err){} }
     if (currentStudySet?.id===setId) { setCurrentView('dashboard'); router.push('/dashboard/'); }
   };
@@ -611,8 +632,9 @@ function DashboardContent() {
       if (!voiceText.trim()) return alert('Please dictate or type notes to begin.');
     }
 
-    setBgGenActive(true);
-    if (!runInBackground) {
+    if (runInBackground) {
+      setBgGenActive(true);
+    } else {
       setIsLoading(true);
       setLoadingProgress(0);
     }
@@ -629,7 +651,7 @@ function DashboardContent() {
 
       const flashcardCount = tier==='pro'?15:5;
       const quizCount = tier==='pro'?10:3;
-      const podWordLimit = tier==='pro'?1500:225;
+      const podWordLimit = tier==='pro'?1500:300;
 
       try {
         if (inputMode==='link') {
@@ -640,13 +662,13 @@ function DashboardContent() {
           finalContext += '\n'+ytData.text;
         }
 
-        const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===" on a new line. Do not bold the SPLIT text.
+        const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===" on a new line. Do not bold the SPLIT text, and DO NOT wrap your response in markdown code blocks.
 
   Section 1: SHORT TITLE (4-8 words max, DO NOT include labels like "Title:" or "Short Title:")
   ===SPLIT===
   Section 2: EXECUTIVE SUMMARY (100-150 words, DO NOT include labels like "Executive Summary:")
   ===SPLIT===
-  Section 3: DETAILED NOTES in Markdown format. Use tables and bold text. Inline math $formula$, block $$formula$$.
+  Section 3: DETAILED NOTES in Markdown format. Use tables, headings, and bold text. Inline math $formula$, block $$formula$$.
   ===SPLIT===
   Section 4: Create exactly ${flashcardCount} FLASHCARDS. Format strictly as a list without bolding Q/A:
   Q: [Question text]
@@ -664,16 +686,31 @@ function DashboardContent() {
   Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
 
         const mainResult = await callLLM(mainPrompt,finalContext.substring(0,150000),pdfFiles);
-        let parts = mainResult.split(/===SPLIT===/i).map((p:string)=>p.trim());
-        while (parts.length<5) parts.push('Content generation incomplete.');
+        
+        // Strip markdown blocks if Gemini accidentally wraps the whole response
+        let cleanMainResult = mainResult.replace(/^```[a-zA-Z]*\n/gm, '').replace(/```$/gm, '').trim();
+
+        let parts = cleanMainResult.split(/\s*===SPLIT===\s*/i).map((p:string)=>p.trim());
+        while (parts.length<5) parts.push('Content generation incomplete. The AI failed to generate all sections properly. Please try again.');
 
         let generatedTitle = parts[0]?.replace(/^(Title:|Here is.*?|Study Set:?|\*\*.*?:\*\*|Section 1:?|Short Title:?)\s*/i,'').replace(/[*#]/g,'').trim().substring(0,100)||`Study Set - ${new Date().toLocaleDateString()}`;
         let summaryClean = (parts[1]||'').replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*|Executive Summary:?)\s*/is,'').trim();
         parts[1] = summaryClean;
 
+        // Ensure part 2 (notes) is also free of unwanted trailing/leading markdown blocks that ruin HTML styling
+        parts[2] = (parts[2] || '').replace(/^```[a-zA-Z]*\n/gm, '').replace(/```$/gm, '').trim();
+
         const podPrompt = `Convert this content into an engaging teaching monologue for an audio podcast. Use short sentences, a conversational tone, and plain text only. Limit strictly to approximately ${podWordLimit} words. Content: ${parts[1]||finalContext.substring(0,3000)}`;
         const podResult = await callLLM(podPrompt,'');
-        const cleanPodResult = podResult.replace(/\*[^*]*\*/g,'').replace(/\([^)]*\)/g,'').replace(/\[[^\]]*\]/g,'').replace(/\s+/g,' ').trim();
+        let cleanPodResult = podResult.replace(/\*[^*]*\*/g,'').replace(/\([^)]*\)/g,'').replace(/\[[^\]]*\]/g,'').replace(/\s+/g,' ').trim();
+
+        // Enforce hard cap for Free tier (~2 minutes of audio)
+        if (tier === 'free') {
+            const words = cleanPodResult.split(/\s+/);
+            if (words.length > 300) {
+                cleanPodResult = words.slice(0, 300).join(' ') + '... This audio has been limited to two minutes on the Free plan. Upgrade to Pro to hear the full lesson!';
+            }
+        }
 
         if (progressInterval) clearInterval(progressInterval);
         if (tipInterval) clearInterval(tipInterval);
@@ -704,7 +741,6 @@ function DashboardContent() {
           setStudyHistory(newHistory);
           setStats(newStats);
           setIsLoading(false);
-          setBgGenActive(false);
           loadStudySet(studySet);
         } else {
           setBgGenActive(false);
@@ -713,9 +749,12 @@ function DashboardContent() {
       } catch(e:any) {
         if (progressInterval) clearInterval(progressInterval);
         if (tipInterval) clearInterval(tipInterval);
-        if (!runInBackground) setIsLoading(false);
-        setBgGenActive(false);
-        if (!runInBackground) alert('Error: '+e.message);
+        if (runInBackground) {
+          setBgGenActive(false);
+        } else {
+          setIsLoading(false);
+          alert('Error: '+e.message);
+        }
       }
     })();
 
@@ -752,12 +791,12 @@ function DashboardContent() {
       const parts = result.split('===SPLIT===');
       let newTitle = currentStudySet.title;
       let cleanNotes = result;
-      if (parts.length>1) { newTitle=parts[0].replace(/TITLE:/i,'').replace(/\*/g,'').trim(); cleanNotes=parts[1].replace(/^```[a-z]*\n/im,'').replace(/\n```$/m,'').trim(); }
-      else cleanNotes=parts[0].replace(/^```[a-z]*\n/im,'').replace(/\n```$/m,'').trim();
+      if (parts.length>1) { newTitle=parts[0].replace(/TITLE:/i,'').replace(/\*/g,'').trim(); cleanNotes=parts[1].replace(/^```[a-z]*\n/im,'').replace(/```$/m,'').trim(); }
+      else cleanNotes=parts[0].replace(/^```[a-z]*\n/im,'').replace(/```$/m,'').trim();
       const newParts = [...currentStudySet.parts];
       newParts[2] = cleanNotes;
       
-      const podWordLimit = tier==='pro'?1500:225;
+      const podWordLimit = tier==='pro'?1500:300;
       const podPrompt = `Update this podcast script to seamlessly integrate the new source material. Keep it as a teaching monologue. Short sentences, conversational tone, plain text only. Limit strictly to approximately ${podWordLimit} words.\n\nExisting Podcast: ${currentStudySet.podcast}\n\nNew Content: ${finalContext.substring(0, 3000)}`;
       const updatedPodcast = await callLLM(podPrompt, '');
 
@@ -767,7 +806,11 @@ function DashboardContent() {
       setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
       if (tier==='pro') syncToFirebase(updatedSet);
       
+      for (const v of TTS_VOICES) {
+        await deleteAudioFromDB(`podcast_${updatedSet.id}_${v}`);
+      }
       await deleteAudioFromDB(`podcast_${updatedSet.id}`);
+      
       setAudioUrl(null);
       setIsPlaying(false);
 
@@ -896,8 +939,18 @@ function DashboardContent() {
     setIsAudioLoading(true); setPodcastProgress(0);
     const progressInterval = setInterval(()=>setPodcastProgress(p=>p<95?p+2:p),600);
     
+    // Use the selected voice in the cache key
+    const voiceToUse = tier === 'pro' ? selectedVoice : 'Kore';
+    const audioCacheKey = `podcast_${currentStudySet.id}_${voiceToUse}`;
+    
     try {
-      const cachedBase64 = await getAudioFromDB(`podcast_${currentStudySet.id}`);
+      let cachedBase64 = await getAudioFromDB(audioCacheKey);
+      
+      // Fallback check: if default voice wasn't found under new key format, try old format
+      if (!cachedBase64 && voiceToUse === 'Kore') {
+          cachedBase64 = await getAudioFromDB(`podcast_${currentStudySet.id}`);
+      }
+
       if (cachedBase64) {
         clearInterval(progressInterval); setPodcastProgress(100);
         const wavBlob = pcmToWav(base64ToArrayBuffer(cachedBase64), 24000);
@@ -913,7 +966,7 @@ function DashboardContent() {
       const apiKeys = keyData.apiKeys||[keyData.apiKey];
       const payload = {
         contents:[{parts:[{text:currentStudySet.podcast}]}],
-        generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:'Kore'}}}},
+        generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName: voiceToUse}}}},
       };
       let successData = null; let lastErrorMsg = '';
       for (const apiKey of apiKeys) {
@@ -932,7 +985,7 @@ function DashboardContent() {
       const base64 = successData.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (!base64) throw new Error('No audio payload returned');
       
-      await saveAudioToDB(`podcast_${currentStudySet.id}`, base64);
+      await saveAudioToDB(audioCacheKey, base64);
       
       const wavBlob = pcmToWav(base64ToArrayBuffer(base64),24000);
       const urlBlob = URL.createObjectURL(wavBlob);
@@ -985,10 +1038,12 @@ function DashboardContent() {
       if (data.error) throw new Error(data.error);
       const textResponse = data.result;
       setAskResponse(`<b>Professor Hazel:</b> ${textResponse}`);
+      
+      const voiceToUse = tier === 'pro' ? selectedVoice : 'Kore';
       const keyRes = await fetch('/api/gemini');
       const keyData = await keyRes.json();
       const apiKeys = keyData.apiKeys||[keyData.apiKey];
-      const payload = {contents:[{parts:[{text:textResponse}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:'Kore'}}}}};
+      const payload = {contents:[{parts:[{text:textResponse}]}],generationConfig:{responseModalities:['AUDIO'],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName: voiceToUse}}}}};
       let ttsData = null; let lastErrorMsg = '';
       for (const apiKey of apiKeys) {
         try {
@@ -1494,7 +1549,7 @@ function DashboardContent() {
                       </div>
                       <h3 className="text-3xl font-extrabold mb-2">Audio Lesson</h3>
                       <p className="text-indigo-200 mb-6 max-w-md mx-auto text-sm">
-                        Listen to a custom AI-generated teaching monologue. ({tier==='pro'?'Max 10 mins':'Max ~1.5 mins'})
+                        Listen to a custom AI-generated teaching monologue. ({tier==='pro'?'Max 10 mins':'Max ~2 mins'})
                       </p>
                       {isAudioLoading&&(
                         <div className="w-full bg-indigo-950/50 rounded-full h-2 mb-6 max-w-xs mx-auto overflow-hidden">
@@ -1523,15 +1578,34 @@ function DashboardContent() {
                           </button>
                           <button onClick={()=>{if(audioRef.current)audioRef.current.currentTime+=10;}} className="text-white hover:text-indigo-300 transition" title="+10s"><FastForward className="w-7 h-7"/></button>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-indigo-300 font-bold uppercase tracking-wider mr-1">Speed:</span>
-                          {([0.5,1,1.5] as const).map(rate=>(
-                            <button key={rate} onClick={()=>changePlaybackRate(rate)}
-                              className={`px-3 py-1.5 rounded-full text-xs font-bold transition border ${playbackRate===rate?'bg-white text-indigo-900 border-white':'border-indigo-400/50 text-indigo-200 hover:bg-white/10'}`}>
-                              {rate}x
-                            </button>
-                          ))}
+                        
+                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 mt-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-indigo-300 font-bold uppercase tracking-wider mr-1">Speed:</span>
+                            {([0.5,1,1.5] as const).map(rate=>(
+                              <button key={rate} onClick={()=>changePlaybackRate(rate)}
+                                className={`px-3 py-1.5 rounded-full text-xs font-bold transition border ${playbackRate===rate?'bg-white text-indigo-900 border-white':'border-indigo-400/50 text-indigo-200 hover:bg-white/10'}`}>
+                                {rate}x
+                              </button>
+                            ))}
+                          </div>
+                          
+                          {tier === 'pro' && (
+                            <div className="flex items-center gap-2 sm:border-l sm:border-indigo-500/30 sm:pl-6">
+                              <span className="text-xs text-indigo-300 font-bold uppercase tracking-wider mr-1 flex items-center gap-1"><Volume2 className="w-3 h-3"/> Voice:</span>
+                              <select
+                                value={selectedVoice}
+                                onChange={(e) => handleVoiceChange(e.target.value)}
+                                className="bg-indigo-900/40 border border-indigo-500/50 text-indigo-200 text-xs font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-400 appearance-none text-center cursor-pointer hover:bg-indigo-800/60 transition"
+                              >
+                                {TTS_VOICES.map(v => (
+                                  <option key={v} value={v} className="bg-indigo-900 text-white">{v}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                         </div>
+
                         {tier==='pro'&&(
                           <div className="pt-6 border-t border-indigo-500/30 w-full mt-4">
                             <button onClick={handleAskProfessor} className="flex items-center justify-center gap-2 mx-auto bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold transition shadow-md">
