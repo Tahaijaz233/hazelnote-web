@@ -78,6 +78,14 @@ export default function Profile() {
   };
 
   const handleLogout = async () => {
+    // Clear local storage and IndexedDB on signout to prevent data leakage across accounts
+    localStorage.removeItem('hz_study_history');
+    localStorage.removeItem('hz_stats');
+    localStorage.removeItem('hz_folders');
+    localStorage.removeItem('hz_prof_chats');
+    if (typeof indexedDB !== 'undefined') {
+      indexedDB.deleteDatabase('HazelNoteDB');
+    }
     await signOut(auth);
     router.push('/login/');
   };
@@ -87,6 +95,16 @@ export default function Profile() {
       if (auth.currentUser) {
         try {
           await deleteUser(auth.currentUser);
+          
+          // Clear local storage to prevent data leakage across accounts
+          localStorage.removeItem('hz_study_history');
+          localStorage.removeItem('hz_stats');
+          localStorage.removeItem('hz_folders');
+          localStorage.removeItem('hz_prof_chats');
+          if (typeof indexedDB !== 'undefined') {
+            indexedDB.deleteDatabase('HazelNoteDB');
+          }
+          
           router.push('/');
         } catch (e: any) {
           if (e.code === 'auth/requires-recent-login') {
