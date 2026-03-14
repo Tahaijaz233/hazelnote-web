@@ -35,29 +35,48 @@ const renderMarkdownWithMath = (text: string) => {
   if (!text) return '';
   let html = text;
 
-  // 0. Render KaTeX Math Blocks and Inline Math first to protect it from markdown formatting
-  html = html.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
-    try { return katex.renderToString(math, { throwOnError: false, displayMode: true }); }
-    catch (e) { return match; }
-  });
+  const renderKatex = (math: string, isBlock: boolean) => {
+    try {
+      return katex.renderToString(math, { throwOnError: false, displayMode: isBlock });
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // 1. Render KaTeX Math Blocks and Inline Math first to protect it from markdown formatting
   
-  html = html.replace(/\$([^\$\n]+?)\$/g, (match, math) => {
-    try { return katex.renderToString(math, { throwOnError: false, displayMode: false }); }
-    catch (e) { return match; }
+  // Block Math: $$ ... $$
+  html = html.replace(/(?<!\\)\$\$([\s\S]+?)(?<!\\)\$\$/g, (match, math) => {
+    return renderKatex(math, true) || match;
   });
 
-  // 1. Strip markdown code block wrappers if they slipped through
+  // Block Math: \[ ... \]
+  html = html.replace(/\\\[([\s\S]+?)\\\]/g, (match, math) => {
+    return renderKatex(math, true) || match;
+  });
+
+  // Inline Math: \( ... \)
+  html = html.replace(/\\\(([\s\S]+?)\\\)/g, (match, math) => {
+    return renderKatex(math, false) || match;
+  });
+
+  // Inline Math: $ ... $ (Upgraded to allow inner newlines)
+  html = html.replace(/(?<!\\)\$([^$]+?)(?<!\\)\$/g, (match, math) => {
+    return renderKatex(math, false) || match;
+  });
+
+  // 2. Strip markdown code block wrappers if they slipped through
   html = html.replace(/^```[a-zA-Z]*\n/gm, '').replace(/```$/gm, '');
 
-  // 2. Headers
+  // 3. Headers
   html = html.replace(/^### (.*?)$/gm, '<h3 class="text-xl font-bold mt-6 mb-3 text-white">$1</h3>');
   html = html.replace(/^## (.*?)$/gm, '<h2 class="text-2xl font-bold mt-8 mb-4 text-white">$1</h2>');
   html = html.replace(/^# (.*?)$/gm, '<h1 class="text-3xl font-extrabold mt-10 mb-5 text-white">$1</h1>');
 
-  // 3. Bold
+  // 4. Bold
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>');
 
-  // 4. Tables
+  // 5. Tables
   html = html.replace(/^\|(.+)\|\s*$/gm, (match, content) => {
     const cells = content.split('|').map((c: string) => c.trim());
     // Skip separator rows
@@ -68,18 +87,18 @@ const renderMarkdownWithMath = (text: string) => {
   // Group adjacent rows into a table
   html = html.replace(/(<tr>.*?<\/tr>(?:\s*<tr>.*?<\/tr>)*)/gs, '<div class="overflow-x-auto my-6"><table class="w-full border-collapse border border-gray-600 bg-gray-800/30 text-sm text-left"><tbody>$1</tbody></table></div>');
 
-  // 5. Unordered Lists
+  // 6. Unordered Lists
   html = html.replace(/^[\*\-] (.*?)$/gm, '<li class="ml-6 list-disc mb-1 ul-item text-gray-200">$1</li>');
   html = html.replace(/(<li[^>]*ul-item[^>]*>.*?<\/li>(?:\s*<li[^>]*ul-item[^>]*>.*?<\/li>)*)/gs, '<ul class="my-4">$1</ul>');
 
-  // 6. Ordered Lists
+  // 7. Ordered Lists
   html = html.replace(/^\d+\. (.*?)$/gm, '<li class="ml-6 list-decimal mb-1 ol-item text-gray-200">$1</li>');
   html = html.replace(/(<li[^>]*ol-item[^>]*>.*?<\/li>(?:\s*<li[^>]*ol-item[^>]*>.*?<\/li>)*)/gs, '<ol class="my-4">$1</ol>');
 
-  // 7. Newlines
+  // 8. Newlines
   html = html.replace(/\n/g, '<br/>');
 
-  // 8. Cleanup <br/> around block tags
+  // 9. Cleanup <br/> around block tags
   const blockTags = ['h1', 'h2', 'h3', 'ul', 'ol', 'li', 'div', 'table', 'tbody', 'tr', 'td'];
   blockTags.forEach(tag => {
     const regexEnd = new RegExp(`(<\\/${tag}>)<br\\/>`, 'gi');
@@ -88,7 +107,7 @@ const renderMarkdownWithMath = (text: string) => {
     html = html.replace(regexStart, '$1');
   });
 
-  // 9. Extra cleanup for common artifacts
+  // 10. Extra cleanup for common artifacts
   html = html.replace(/<\/div><br\/>/g, '</div>');
   html = html.replace(/<\/ul><br\/>/g, '</ul>');
   html = html.replace(/<\/ol><br\/>/g, '</ol>');
