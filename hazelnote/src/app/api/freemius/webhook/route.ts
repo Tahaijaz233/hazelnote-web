@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/response';
+import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { adminDb } from '@/lib/firebase-admin'; // Ensure this points to your firebase-admin setup
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, limit, updateDoc } from 'firebase/firestore';
 
 // Helper to verify Freemius webhook signature
 function verifyFreemiusSignature(signature: string, body: string, secretKey: string) {
@@ -35,8 +36,9 @@ export async function POST(req: Request) {
     }
 
     // Find the user in Firebase by email to update their profile
-    const profilesRef = adminDb.collection('profiles');
-    const snapshot = await profilesRef.where('email', '==', userEmail).limit(1).get();
+    const profilesRef = collection(db, 'profiles');
+    const q = query(profilesRef, where('email', '==', userEmail), limit(1));
+    const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
       console.warn(`Webhook received for ${userEmail}, but no matching Firebase user found.`);
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
     switch (eventType) {
       case 'subscription.created':
         // User just bought the plan
-        await userRef.update({
+        await updateDoc(userRef, {
           is_pro: true,
           fs_plan_type: data.billing_cycle === 1 ? 'monthly' : 'annual',
           fs_subscription_id: data.id,
@@ -62,7 +64,7 @@ export async function POST(req: Request) {
 
       case 'payment.created':
         // User's subscription renewed successfully
-        await userRef.update({
+        await updateDoc(userRef, {
           is_pro: true,
           fs_renewal_date: data.next_payment || null, 
         });
@@ -71,7 +73,7 @@ export async function POST(req: Request) {
       case 'subscription.cancelled':
         // User cancelled auto-renew, but they still have access until the period ends.
         // We just flag it so the UI knows not to show "Renews on", but rather "Expires on"
-        await userRef.update({
+        await updateDoc(userRef, {
           fs_is_cancelled: true,
         });
         break;
@@ -79,7 +81,7 @@ export async function POST(req: Request) {
       case 'license.expired':
         // The billing period ended after a cancellation, or their card failed too many times.
         // THIS is when we actually revoke Pro access.
-        await userRef.update({
+        await updateDoc(userRef, {
           is_pro: false,
           fs_plan_type: null,
           fs_renewal_date: null,
