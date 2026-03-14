@@ -35,6 +35,17 @@ const renderMarkdownWithMath = (text: string) => {
   if (!text) return '';
   let html = text;
 
+  // 0. Render KaTeX Math Blocks and Inline Math first to protect it from markdown formatting
+  html = html.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+    try { return katex.renderToString(math, { throwOnError: false, displayMode: true }); }
+    catch (e) { return match; }
+  });
+  
+  html = html.replace(/\$([^\$\n]+?)\$/g, (match, math) => {
+    try { return katex.renderToString(math, { throwOnError: false, displayMode: false }); }
+    catch (e) { return match; }
+  });
+
   // 1. Strip markdown code block wrappers if they slipped through
   html = html.replace(/^```[a-zA-Z]*\n/gm, '').replace(/```$/gm, '');
 
@@ -993,8 +1004,8 @@ function DashboardContent() {
     setIsAudioLoading(true); setPodcastProgress(0);
     const progressInterval = setInterval(()=>setPodcastProgress(p=>p<95?p+2:p),600);
     
-    // Use the selected voice in the cache key
-    const voiceToUse = tier === 'pro' ? selectedVoice : 'Kore';
+    // GUARANTEED SELECTION: Ensures UI selection holds irrespective of temporary tier sync issues
+    const voiceToUse = selectedVoice || 'Kore';
     const audioCacheKey = `podcast_${currentStudySet.id}_${voiceToUse}`;
     
     try {
@@ -1093,7 +1104,7 @@ function DashboardContent() {
       const textResponse = data.result;
       setAskResponse(`<b>Professor Hazel:</b> ${textResponse}`);
       
-      const voiceToUse = tier === 'pro' ? selectedVoice : 'Kore';
+      const voiceToUse = selectedVoice || 'Kore'; // GUARANTEED SELECTION Fix
       const keyRes = await fetch('/api/gemini');
       const keyData = await keyRes.json();
       const apiKeys = keyData.apiKeys||[keyData.apiKey];
@@ -1890,6 +1901,7 @@ function DashboardContent() {
 export default function DashboardPage() {
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center bg-[#0F172A] text-white">Loading...</div>}>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" />
       <DashboardContent />
     </Suspense>
   );
