@@ -131,17 +131,10 @@ export default function Profile() {
     }
   };
 
-  const handleCancelSubscription = async () => {
-    if (confirm("To cancel your subscription, please log into your billing portal. Do you want to proceed?")) {
-      await handleManageBilling();
-    }
-  };
-
   const month = getCurrentMonth();
   const monthlyCount = stats.monthlySets?.[month] || 0;
   const usagePercentage = tier === 'free' ? Math.min((monthlyCount / 2) * 100, 100) : 100;
 
-  // FIX 4: Sidebar dark-only
   const Sidebar = () => (
     <aside className={`w-72 bg-gray-900 border-r border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
       <div className="p-6 flex items-center justify-between">
@@ -289,17 +282,14 @@ export default function Profile() {
                     </div>
                   </div>
                   <div className="flex flex-col sm:flex-row gap-3">
-                    <button onClick={handleManageBilling} disabled={portalLoading}
-                      className="btn-primary flex-1 py-3.5 rounded-xl font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition text-center flex items-center justify-center gap-2 disabled:opacity-70 disabled:hover:scale-100">
-                      {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                      {portalLoading ? 'Securing Link...' : 'Manage Billing'}
+                    <button
+                      onClick={handleManageBilling}
+                      disabled={portalLoading}
+                      className="bg-gray-700 hover:bg-red-900/40 text-gray-200 hover:text-red-400 flex-1 py-3.5 rounded-xl font-bold shadow-md hover:shadow-lg hover:scale-[1.02] transition text-center flex items-center justify-center gap-2 border border-gray-600 hover:border-red-800 disabled:opacity-50 disabled:hover:scale-100"
+                    >
+                      {portalLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                      {portalLoading ? 'Loading...' : profile?.fs_is_cancelled ? 'Manage Subscription' : 'Cancel Subscription'}
                     </button>
-                    {!profile?.fs_is_cancelled && (
-                      <button onClick={handleCancelSubscription} disabled={portalLoading}
-                        className="bg-gray-700 hover:bg-red-900/40 text-gray-200 hover:text-red-400 flex-1 py-3.5 rounded-xl font-bold shadow-md hover:shadow-lg hover:scale-[1.02] transition text-center flex items-center justify-center gap-2 border border-gray-600 hover:border-red-800 disabled:opacity-50">
-                        <X className="w-4 h-4" /> Cancel Subscription
-                      </button>
-                    )}
                   </div>
                 </div>
               ) : (
