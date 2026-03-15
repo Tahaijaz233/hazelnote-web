@@ -45,6 +45,9 @@ const normalizeStudyContent = (text: string): string => {
     .replace(/^# /gm, '## ');
 };
 
+// FIX: Strip any leading "1." / "2)" that the AI may include in question text to prevent double-numbering
+const stripLeadingNumber = (text: string) => text.replace(/^\s*\d+[\.\)]\s*/, '');
+
 const renderMarkdownWithMath = (text: string) => {
   if (!text) return '';
   let html = text;
@@ -340,6 +343,9 @@ function DashboardContent() {
   const [folderDropdownOpen, setFolderDropdownOpen] = useState(false);
   const [folderModal, setFolderModal] = useState<{isOpen:boolean;type:'create'|'edit';folderId?:string;name:string;emoji:string}>({isOpen:false,type:'create',name:'',emoji:'📁'});
 
+  // FIX: Search bar state
+  const [searchQuery, setSearchQuery] = useState('');
+
   const [addContextModalOpen, setAddContextModalOpen] = useState(false);
   const [contextInputMode, setContextInputMode] = useState<'pdf'|'voice'|'link'>('pdf');
   const [contextPdfFiles, setContextPdfFiles] = useState<File[]>([]);
@@ -605,7 +611,10 @@ function DashboardContent() {
       qs.forEach((d)=>firebaseSets.push(d.data() as StudySet));
       if (firebaseSets.length>0) {
         const localSets = safeParseJSON('hz_study_history',[]);
-        const merged = [...firebaseSets,...localSets.filter((ls:StudySet)=>!firebaseSets.some((fs:StudySet)=>fs.id===ls.id))].slice(0,50);
+        // FIX: Sort merged sets newest-first
+        const merged = [...firebaseSets,...localSets.filter((ls:StudySet)=>!firebaseSets.some((fs:StudySet)=>fs.id===ls.id))]
+          .sort((a:StudySet,b:StudySet)=>new Date(b.date).getTime()-new Date(a.date).getTime())
+          .slice(0,50);
         setStudyHistory(merged); saveToStorage('hz_study_history',merged);
       }
       setSyncStatus('synced');
@@ -1258,10 +1267,10 @@ function DashboardContent() {
       <div className="max-w-3xl mx-auto space-y-8 pb-8">
         {questions.map((q,i)=>(
           <div key={i} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700 p-6 rounded-2xl">
-            {/* FIX: Render sequential number separately so markdown parsing never resets it to 1 */}
+            {/* FIX: Strip AI-prepended number + render sequential i+1 so numbering is always 1,2,3... */}
             <h4 className="font-bold text-gray-100 mb-4">
               <span className="mr-1">{i + 1}.</span>
-              <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(q.q) }} />
+              <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(stripLeadingNumber(q.q)) }} />
             </h4>
             <div className="space-y-2">
               {q.opts.map((opt,j)=>{
@@ -1340,6 +1349,12 @@ function DashboardContent() {
     </aside>
   );
 
+  // FIX: Computed filtered + sorted list (newest first, search filtered)
+  const filteredSets = studyHistory
+    .filter(s => activeFilterFolder ? s.folderId === activeFilterFolder : true)
+    .filter(s => searchQuery.trim() === '' ? true : s.title.toLowerCase().includes(searchQuery.toLowerCase()) || s.summary.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
   return (
     <div className="flex h-screen overflow-hidden bg-gradient-to-br from-[#0F172A] to-[#1E293B]">
       {sidebarOpen&&<div onClick={()=>setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm"/>}
@@ -1376,14 +1391,8 @@ function DashboardContent() {
                 </div>
               )}
             </div>
-            <div className="glass-card p-8 md:p-12 text-center relative overflow-hidden bg-gray-800/50 backdrop-blur-lg border-gray-700 mb-10">
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-blue-500"></div>
-              <div className="w-20 h-20 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6 text-green-400"><Sparkles className="w-10 h-10"/></div>
-              <h3 className="text-2xl font-bold text-white mb-2">Ready to learn something new?</h3>
-              <p className="text-gray-400 mb-8 max-w-md mx-auto">Upload PDFs, dictate voice notes, or paste YouTube URLs to generate your next study set.</p>
-              <button onClick={()=>setCurrentView('create')} className="btn-primary px-10 py-4 text-lg shadow-xl">Create New Study Set</button>
-            </div>
-            <div className="mb-4 flex items-center justify-between">
+            {/* FIX: "Ready to learn something new" block removed */}
+            <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="relative inline-block text-left z-20">
                 <button onClick={()=>setFolderDropdownOpen(!folderDropdownOpen)} className="px-5 py-2.5 rounded-xl font-bold bg-gray-800 hover:bg-gray-700 text-white flex items-center gap-2 border border-gray-700 shadow-md transition-all">
                   {activeFilterFolder?<>{folders.find(f=>f.id===activeFilterFolder)?.emoji} {folders.find(f=>f.id===activeFilterFolder)?.name}</>:<>📁 All Sets</>}
@@ -1405,13 +1414,35 @@ function DashboardContent() {
                   </div>
                 )}
               </div>
+              {/* FIX: Search bar */}
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none"/>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search study sets..."
+                  className="w-full pl-9 pr-4 py-2.5 bg-gray-800 border border-gray-700 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-green-500 transition"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition">
+                    <X className="w-3.5 h-3.5"/>
+                  </button>
+                )}
+              </div>
             </div>
             <div className="space-y-4">
-              <h3 className="text-xl font-bold text-white mb-4">Study Sets</h3>
-              {studyHistory.filter(s=>activeFilterFolder?s.folderId===activeFilterFolder:true).length===0?(
-                <p className="text-gray-500 text-center py-8 bg-gray-800/30 rounded-2xl border border-dashed border-gray-700">No study sets found in this view.</p>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-white mb-4">Study Sets</h3>
+                <button onClick={()=>setCurrentView('create')} className="btn-primary px-5 py-2.5 text-sm font-bold flex items-center gap-2 mb-4"><PlusCircle className="w-4 h-4"/> New Set</button>
+              </div>
+              {/* FIX: Use filteredSets (newest first + search filtered) */}
+              {filteredSets.length===0?(
+                <p className="text-gray-500 text-center py-8 bg-gray-800/30 rounded-2xl border border-dashed border-gray-700">
+                  {searchQuery ? `No study sets found for "${searchQuery}".` : 'No study sets found in this view.'}
+                </p>
               ):(
-                studyHistory.filter(s=>activeFilterFolder?s.folderId===activeFilterFolder:true).slice(0,10).map(set=>(
+                filteredSets.slice(0,10).map(set=>(
                   <div key={set.id} onClick={()=>loadStudySet(set)} className="glass-card p-5 hover:shadow-lg transition cursor-pointer bg-gray-800/50 backdrop-blur-lg border-gray-700">
                     <div className="flex justify-between items-start mb-2">
                       <h4 className="font-bold text-white flex-1 mr-2">{set.title}</h4>
