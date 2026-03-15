@@ -18,6 +18,9 @@ interface StudySet { id: number; title: string; date: string; summary: string; f
 const safeParseJSON = <T,>(key: string, fallback: T): T => { if (typeof window === 'undefined') return fallback; try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : fallback; } catch { return fallback; } };
 const saveToStorage = (key: string, value: any) => { if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value)); };
 
+// Strip any leading "1." / "2)" style number prefix that the AI may include in question text
+const stripLeadingNumber = (text: string) => text.replace(/^\s*\d+[\.\)]\s*/, '');
+
 interface MarkingResult {
   score: number;
   maxScore: number;
@@ -419,10 +422,9 @@ export default function Exam() {
               <div className="space-y-8 glass-card p-6 md:p-10 bg-gray-800/50 border-gray-700">
                 {examQuestions.map((q, i) => (
                   <div key={i} className="bg-gray-800 border border-gray-700 p-6 rounded-2xl">
-                    {/* FIX: Separate number from markdown rendering to prevent 1,1,1 bug */}
                     <h4 className="font-bold text-white mb-4">
                       <span className="mr-1">{i + 1}.</span>
-                      <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(q.question) }} />
+                      <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(stripLeadingNumber(q.question)) }} />
                     </h4>
                     {q.type === 'mcq' && (
                       <div className="space-y-2">
@@ -503,10 +505,9 @@ export default function Exam() {
                 const isCorrect = userAnswers[i] === q.answer;
                 return (
                   <div key={i} className={`glass-card p-5 border-gray-700 border-l-4 ${isCorrect ? 'border-l-green-500' : 'border-l-red-500'}`}>
-                    {/* FIX: Separate number from markdown rendering */}
                     <p className="font-bold text-white mb-2">
                       <span className="mr-1">{i + 1}.</span>
-                      <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(q.question) }} />
+                      <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(stripLeadingNumber(q.question)) }} />
                     </p>
                     <div className="text-sm space-y-1">
                       <p className={isCorrect ? 'text-green-400 font-bold' : 'text-red-400'} dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`Your answer: ${userAnswers[i] ? `**${userAnswers[i]}**. ${q.options[userAnswers[i].charCodeAt(0) - 65] || ''}` : 'Not answered'}`) }} />
@@ -523,10 +524,9 @@ export default function Exam() {
                 return (
                   <div key={i} className={`glass-card p-6 border-gray-700 border-l-4 ${color === 'green' ? 'border-l-green-500' : color === 'yellow' ? 'border-l-yellow-500' : 'border-l-red-500'}`}>
                     <div className="flex items-start justify-between mb-3">
-                      {/* FIX: Separate number from markdown rendering */}
                       <p className="font-bold text-white flex-1 mr-4">
                         <span className="mr-1">{i + 1}.</span>
-                        <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(q.question) }} />
+                        <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(stripLeadingNumber(q.question)) }} />
                       </p>
                       {result && (
                         <span className={`shrink-0 text-lg font-extrabold px-3 py-1 rounded-full ${color === 'green' ? 'bg-green-900/30 text-green-400' : color === 'yellow' ? 'bg-yellow-900/30 text-yellow-400' : 'bg-red-900/30 text-red-400'}`}>
