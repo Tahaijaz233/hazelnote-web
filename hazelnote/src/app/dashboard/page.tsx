@@ -24,12 +24,26 @@ interface UserStats { streak: number; notes: number; lastDate: string | null; mo
 interface Folder { id: string; name: string; emoji: string; }
 
 const TTS_VOICES = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Aoede', 'Zephyr', 'Leda', 'Orus'];
+// FIX: Gender labels for voice dropdown
+const TTS_VOICE_GENDER: Record<string, string> = {
+  'Kore': 'Female', 'Puck': 'Male', 'Charon': 'Male', 'Fenrir': 'Male',
+  'Aoede': 'Female', 'Zephyr': 'Female', 'Leda': 'Female', 'Orus': 'Male'
+};
 
 const safeParseJSON = (key: string, fallback: any) => { if (typeof window === 'undefined') return fallback; try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : fallback; } catch { return fallback; } };
 const saveToStorage = (key: string, value: any) => { if (typeof window !== 'undefined') window.localStorage.setItem(key, JSON.stringify(value)); };
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 const base64ToArrayBuffer = (base: string) => { const str = window.atob(base); const bytes = new Uint8Array(str.length); for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i); return bytes.buffer; };
 const pcmToWav = (pcm: ArrayBuffer, rate: number) => { const n=1,b=rate*n*2,a=n*2,buf=new ArrayBuffer(44+pcm.byteLength),v=new DataView(buf),w=(o:number,s:string)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};w(0,'RIFF');v.setUint32(4,36+pcm.byteLength,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,n,true);v.setUint32(24,rate,true);v.setUint32(28,b,true);v.setUint16(32,a,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,pcm.byteLength,true);new Uint8Array(buf,44).set(new Uint8Array(pcm));return new Blob([v],{type:'audio/wav'});};
+
+// FIX: Normalize headings — collapse ### and deeper to ## so notes never use h3+
+const normalizeStudyContent = (text: string): string => {
+  if (!text) return text;
+  return text
+    .replace(/^#{4,} /gm, '## ')
+    .replace(/^### /gm, '## ')
+    .replace(/^# /gm, '## ');
+};
 
 const renderMarkdownWithMath = (text: string) => {
   if (!text) return '';
@@ -355,6 +369,8 @@ function DashboardContent() {
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
+  // FIX: Track whether podcast has been generated for this study set; lock voice after
+  const [podcastGenerated, setPodcastGenerated] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState('Kore');
   const audioRef = useRef<HTMLAudioElement|null>(null);
 
@@ -424,7 +440,9 @@ function DashboardContent() {
     if (audioRef.current) audioRef.current.playbackRate = playbackRate;
   }, [playbackRate]);
 
+  // FIX: Voice can only be changed before the podcast is generated for this study set
   const handleVoiceChange = (voice: string) => {
+    if (podcastGenerated) return; // locked once audio is generated
     setSelectedVoice(voice);
     saveToStorage('hz_voice', voice);
     setAudioUrl(null);
@@ -445,7 +463,6 @@ function DashboardContent() {
     }
   };
 
-  // FIX 1: Pro limit changed from 15 to 10
   const checkChatLimit = async () => {
     const limit = tier === 'pro' ? 10 : 2;
     const today = new Date().toISOString().split('T')[0];
@@ -704,7 +721,8 @@ function DashboardContent() {
       },3000) : null;
 
       const flashcardCount = tier==='pro'?15:5;
-      const quizCount = tier==='pro'?10:3;
+      // FIX: Free plan gets 5 quiz questions (was 3)
+      const quizCount = tier==='pro'?10:5;
       const podWordLimit = tier==='pro'?1500:300;
 
       try {
@@ -716,13 +734,14 @@ function DashboardContent() {
           finalContext += '\n'+ytData.text;
         }
 
-        const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===" on a new line. Do not bold the SPLIT text, and DO NOT wrap your response in markdown code blocks.
+        // FIX: Prompt instructs AI to use only ## headings (no ### or deeper)
+        const mainPrompt = `You are an expert tutor. Create highly structured study materials from this content. You MUST generate EXACTLY 5 sections separated by exactly "===SPLIT===" on a new line. Do not bold the SPLIT text, and DO NOT wrap your response in markdown code blocks. In the detailed notes section use ONLY ## headings — never ### or deeper.
 
   Section 1: SHORT TITLE (4-8 words max, DO NOT include labels like "Title:" or "Short Title:")
   ===SPLIT===
   Section 2: EXECUTIVE SUMMARY (100-150 words, DO NOT include labels like "Executive Summary:")
   ===SPLIT===
-  Section 3: DETAILED NOTES in Markdown format. Use tables, headings, and bold text. Inline math $formula$, block $$formula$$.
+  Section 3: DETAILED NOTES in Markdown format. Use tables, ## headings only, and bold text. Inline math $formula$, block $$formula$$.
   ===SPLIT===
   Section 4: Create exactly ${flashcardCount} FLASHCARDS. Format strictly as a list without bolding Q/A:
   Q: [Question text]
@@ -748,7 +767,8 @@ function DashboardContent() {
         let generatedTitle = parts[0]?.replace(/^(Title:|Here is.*?|Study Set:?|\*\*.*?:\*\*|Section 1:?|Short Title:?)\s*/i,'').replace(/[*#]/g,'').trim().substring(0,100)||`Study Set - ${new Date().toLocaleDateString()}`;
         let summaryClean = (parts[1]||'').replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*|Executive Summary:?)\s*/is,'').trim();
         parts[1] = summaryClean;
-        parts[2] = (parts[2] || '').replace(/^```[a-zA-Z]*\n/gm, '').replace(/```$/gm, '').trim();
+        // FIX: Strip markdown fences and normalize headings so no ### appears
+        parts[2] = normalizeStudyContent((parts[2] || '').replace(/^```[a-zA-Z]*\n/gm, '').replace(/```$/gm, '').trim());
 
         const podPrompt = `Convert this content into an engaging teaching monologue for an audio podcast. Use short sentences, a conversational tone, and plain text only. Limit strictly to approximately ${podWordLimit} words. Content: ${parts[1]||finalContext.substring(0,3000)}`;
         const podResult = await callLLM(podPrompt,'');
@@ -834,13 +854,13 @@ function DashboardContent() {
     }
     setIsAddingContextLoading(true);
     try {
-      const prompt = `You are an expert tutor. Integrate the new source material into the existing notes seamlessly.\nReturn ONLY in this EXACT format:\nTITLE: [New Updated Title (4-8 words max)]\n===SPLIT===\n[Updated Comprehensive Notes in Markdown format]`;
+      const prompt = `You are an expert tutor. Integrate the new source material into the existing notes seamlessly. Use ONLY ## headings in the notes.\nReturn ONLY in this EXACT format:\nTITLE: [New Updated Title (4-8 words max)]\n===SPLIT===\n[Updated Comprehensive Notes in Markdown format with ## headings only]`;
       const result = await callLLM(prompt,finalContext,contextInputMode==='pdf'?contextPdfFiles:undefined);
       const parts = result.split('===SPLIT===');
       let newTitle = currentStudySet.title;
       let cleanNotes = result;
-      if (parts.length>1) { newTitle=parts[0].replace(/TITLE:/i,'').replace(/\*/g,'').trim(); cleanNotes=parts[1].replace(/^```[a-z]*\n/im,'').replace(/```$/m,'').trim(); }
-      else cleanNotes=parts[0].replace(/^```[a-z]*\n/im,'').replace(/```$/m,'').trim();
+      if (parts.length>1) { newTitle=parts[0].replace(/TITLE:/i,'').replace(/\*/g,'').trim(); cleanNotes=normalizeStudyContent(parts[1].replace(/^```[a-z]*\n/im,'').replace(/```$/m,'').trim()); }
+      else cleanNotes=normalizeStudyContent(parts[0].replace(/^```[a-z]*\n/im,'').replace(/```$/m,'').trim());
       const newParts = [...currentStudySet.parts];
       newParts[2] = cleanNotes;
       const podWordLimit = tier==='pro'?1500:300;
@@ -855,6 +875,8 @@ function DashboardContent() {
       await deleteAudioFromDB(`podcast_${updatedSet.id}`);
       setAudioUrl(null);
       setIsPlaying(false);
+      // FIX: Reset podcast lock when context is added (new audio must be regenerated)
+      setPodcastGenerated(false);
       setContextPdfFiles([]); setContextVoiceText(''); setAddContextModalOpen(false); setIsAddingContextLoading(false);
       alert('Context seamlessly integrated!');
     } catch(e:any) { setIsAddingContextLoading(false); alert('Error: '+e.message); }
@@ -866,6 +888,8 @@ function DashboardContent() {
     setAudioUrl(null);
     setPlaybackRate(1);
     setIsPlaying(false);
+    // FIX: Reset podcast lock when a new study set is loaded
+    setPodcastGenerated(false);
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
     setChatMessages([{role:'ai',text:`Hi! I've analyzed <b>${studySet.title}</b>. How can I help?`}]);
     setCurrentView('study');
@@ -956,7 +980,8 @@ function DashboardContent() {
     if (!confirm('This will replace all existing quiz questions with a fresh set. Continue?')) return;
     setIsGeneratingExtra(true);
     try {
-      const count = tier==='pro'?10:3;
+      // FIX: Free plan gets 5 quiz questions
+      const count = tier==='pro'?10:5;
       const result = await callLLM(`Generate exactly ${count} multiple choice questions from this material. Format strictly:\nQ: [Question]\nA) ...\nB) ...\nC) ...\nD) ...\nAns: [A/B/C/D]\nExp: [explanation]\n\nContent:\n${currentStudySet.parts[2].substring(0,15000)}`,'');
       const updatedParts = [...currentStudySet.parts];
       updatedParts[4] = result;
@@ -992,6 +1017,8 @@ function DashboardContent() {
         const wavBlob = pcmToWav(base64ToArrayBuffer(cachedBase64), 24000);
         const urlBlob = URL.createObjectURL(wavBlob);
         setAudioUrl(urlBlob); setIsPlaying(true);
+        // FIX: Mark as generated so voice gets locked
+        setPodcastGenerated(true);
         setTimeout(()=>{ if(audioRef.current){ audioRef.current.playbackRate=playbackRate; audioRef.current.play(); } },200);
         setIsAudioLoading(false);
         return;
@@ -1024,6 +1051,8 @@ function DashboardContent() {
       const urlBlob = URL.createObjectURL(wavBlob);
       clearInterval(progressInterval); setPodcastProgress(100);
       setAudioUrl(urlBlob); setIsPlaying(true);
+      // FIX: Lock voice after successful generation
+      setPodcastGenerated(true);
       setTimeout(()=>{ if(audioRef.current){ audioRef.current.playbackRate=playbackRate; audioRef.current.play(); } },200);
     } catch(e:any) {
       clearInterval(progressInterval); alert('Audio Error: '+e.message);
@@ -1057,7 +1086,6 @@ function DashboardContent() {
     } catch(e){ alert('Microphone access denied or not supported.'); }
   };
 
-  // FIX 3: Apply renderMarkdownWithMath to the AI text response so KaTeX renders correctly
   const processVoiceQuestion = async (base64:string,mimeType:string) => {
     if (!(await checkChatLimit())) {
       setAskModalOpen(false);
@@ -1071,7 +1099,6 @@ function DashboardContent() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       const textResponse = data.result;
-      // FIX 3: Use renderMarkdownWithMath to properly render KaTeX in the response
       setAskResponse(`<b>Professor Hazel:</b> ${renderMarkdownWithMath(textResponse)}`);
 
       const voiceToUse = selectedVoice || 'Kore';
@@ -1133,7 +1160,7 @@ function DashboardContent() {
     }
   };
 
-  // FIX 2: Drag and drop handlers for PDF upload
+  // Drag and drop handlers for PDF upload
   const handlePdfDragOver = (e: React.DragEvent) => { e.preventDefault(); setPdfDragOver(true); };
   const handlePdfDragLeave = () => setPdfDragOver(false);
   const handlePdfDrop = (e: React.DragEvent) => {
@@ -1147,7 +1174,7 @@ function DashboardContent() {
     setPdfFiles(prev => [...prev, ...files]);
   };
 
-  // FIX 2: Drag and drop handlers for chat panel
+  // Drag and drop handlers for chat panel
   const handleChatDragOver = (e: React.DragEvent) => { e.preventDefault(); setChatDragOver(true); };
   const handleChatDragLeave = () => setChatDragOver(false);
   const handleChatDrop = (e: React.DragEvent) => {
@@ -1231,7 +1258,11 @@ function DashboardContent() {
       <div className="max-w-3xl mx-auto space-y-8 pb-8">
         {questions.map((q,i)=>(
           <div key={i} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700 p-6 rounded-2xl">
-            <h4 className="font-bold text-gray-100 mb-4" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i+1}. ${q.q}`) }} />
+            {/* FIX: Render sequential number separately so markdown parsing never resets it to 1 */}
+            <h4 className="font-bold text-gray-100 mb-4">
+              <span className="mr-1">{i + 1}.</span>
+              <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(q.q) }} />
+            </h4>
             <div className="space-y-2">
               {q.opts.map((opt,j)=>{
                 const letter = String.fromCharCode(65+j);
@@ -1275,7 +1306,6 @@ function DashboardContent() {
     );
   };
 
-  // FIX 4: Sidebar uses dark-only classes
   const Sidebar = () => (
     <aside className={`bg-gray-900 border-r border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-all duration-300 ease-in-out ${sidebarOpen?'translate-x-0':'-translate-x-full md:translate-x-0'} ${sidebarCollapsed?'md:w-0 md:opacity-0 md:overflow-hidden':'w-72'}`}>
       <div className="p-6 flex items-center justify-between">
@@ -1416,7 +1446,6 @@ function DashboardContent() {
               <button onClick={()=>setInputMode('link')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode==='link'?'bg-green-500 text-white shadow-md':'bg-transparent text-gray-400 hover:bg-gray-700'}`}><LinkIcon className="w-4 h-4"/> YouTube</button>
             </div>
 
-            {/* FIX 2: PDF upload area with drag and drop */}
             {inputMode==='pdf'&&(
               <div
                 className={`glass-card p-8 md:p-12 text-center border-2 border-dashed bg-gray-800/50 backdrop-blur-lg transition-all ${pdfDragOver ? 'border-green-400 bg-green-900/20 scale-[1.01]' : 'border-gray-600'}`}
@@ -1651,15 +1680,19 @@ function DashboardContent() {
                           {tier === 'pro' && (
                             <div className="flex items-center gap-2 sm:border-l sm:border-indigo-500/30 sm:pl-6">
                               <span className="text-xs text-indigo-300 font-bold uppercase tracking-wider mr-1 flex items-center gap-1"><Volume2 className="w-3 h-3"/> Voice:</span>
+                              {/* FIX: Disabled after generation; shows Male/Female labels */}
                               <select
                                 value={selectedVoice}
                                 onChange={(e) => handleVoiceChange(e.target.value)}
-                                className="bg-indigo-900/40 border border-indigo-500/50 text-indigo-200 text-xs font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-400 appearance-none text-center cursor-pointer hover:bg-indigo-800/60 transition"
+                                disabled={podcastGenerated}
+                                title={podcastGenerated ? 'Voice cannot be changed after generating the podcast' : 'Select voice before generating'}
+                                className={`bg-indigo-900/40 border border-indigo-500/50 text-indigo-200 text-xs font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-400 appearance-none text-center hover:bg-indigo-800/60 transition ${podcastGenerated ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                               >
                                 {TTS_VOICES.map(v => (
-                                  <option key={v} value={v} className="bg-indigo-900 text-white">{v}</option>
+                                  <option key={v} value={v} className="bg-indigo-900 text-white">{v} ({TTS_VOICE_GENDER[v]})</option>
                                 ))}
                               </select>
+                              {podcastGenerated && <span className="text-[10px] text-indigo-400 font-bold">Locked</span>}
                             </div>
                           )}
                         </div>
@@ -1681,7 +1714,7 @@ function DashboardContent() {
         )}
       </main>
 
-      {/* FIX 2: Chat Panel with drag and drop */}
+      {/* Chat Panel with drag and drop */}
       {chatOpen&&(
         <div className={`fixed right-0 top-0 bottom-0 w-full md:w-[420px] bg-gray-800 shadow-2xl z-50 flex flex-col border-l border-gray-700 transition-transform duration-300 ${chatOpen?'translate-x-0':'translate-x-full'}`}>
           <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
