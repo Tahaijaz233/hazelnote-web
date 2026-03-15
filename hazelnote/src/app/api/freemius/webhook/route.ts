@@ -56,17 +56,29 @@ export async function POST(req: Request) {
           is_pro: true,
           fs_plan_type: data.billing_cycle === 1 ? 'monthly' : 'annual',
           fs_subscription_id: data.id,
-          fs_user_id: data.user_id, // <--- ADD THIS LINE
+          fs_user_id: data.user_id,
           fs_renewal_date: data.next_payment || null,
           fs_is_cancelled: false,
         });
         break;
 
       case 'payment.created':
-        // User's subscription renewed successfully
+        // User's subscription renewed successfully or initial payment processed
         await updateDoc(userRef, {
           is_pro: true,
-          fs_renewal_date: data.next_payment || null, 
+          fs_user_id: data.user_id || data.user?.id || null,
+          fs_plan_type: data.billing_cycle === 1 ? 'monthly' : 'annual',
+          fs_renewal_date: data.next_payment || null,
+          fs_is_cancelled: false,
+        });
+        break;
+
+      case 'license.activated':
+        // License activated after purchase
+        await updateDoc(userRef, {
+          is_pro: true,
+          fs_user_id: data.user_id || data.user?.id || null,
+          fs_is_cancelled: false,
         });
         break;
 
