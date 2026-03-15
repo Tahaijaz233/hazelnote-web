@@ -26,11 +26,14 @@ export default function ProfessorPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [tier, setTier] = useState<'free' | 'pro'>('free');
-  
+
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [showChatLog, setShowChatLog] = useState(false);
   const [useWebSearch, setUseWebSearch] = useState(false);
+
+  // FIX 2: Drag and drop state for chat
+  const [chatDragOver, setChatDragOver] = useState(false);
 
   const [chatMessages, setChatMessages] = useState<{role:'user'|'ai';text:string}[]>([
     { role: 'ai', text: "Hello! I am Professor Hazel. I can help you create study schedules, clarify difficult topics with your uploaded notes, come up with mnemonics, and offer general academic support. How can I help you today?" }
@@ -38,13 +41,13 @@ export default function ProfessorPage() {
   const [chatInput, setChatInput] = useState('');
   const [chatFile, setChatFile] = useState<File|null>(null);
   const [isTyping, setIsTyping] = useState(false);
-  
+
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loaded = safeParseJSON<ChatSession[]>('hz_prof_chats', []);
     setChatSessions(loaded);
-    
+
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
@@ -99,20 +102,21 @@ export default function ProfessorPage() {
     if (window.innerWidth < 768) setShowChatLog(false);
   };
 
+  // FIX 1: Pro limit changed from 15 to 10
   const checkChatLimit = async () => {
-    const limit = tier === 'pro' ? 15 : 2;
+    const limit = tier === 'pro' ? 10 : 2;
     const today = new Date().toISOString().split('T')[0];
     let currentStats = profile?.chat_stats || { date: today, count: 0 };
-    
+
     if (currentStats.date !== today) {
       currentStats = { date: today, count: 0 };
     }
-    
+
     if (currentStats.count >= limit) {
       alert(`Message limit reached! You can only send ${limit} messages to Professor Hazel per day on the ${tier === 'pro' ? 'Pro' : 'Free'} plan. Limit resets in 24 hours.`);
       return false;
     }
-    
+
     currentStats.count += 1;
     setProfile(prev => prev ? { ...prev, chat_stats: currentStats } : prev);
     if (user) {
@@ -152,10 +156,8 @@ export default function ProfessorPage() {
           let combinedText = systemPrompt||'';
           if (userText) combinedText += '\n\nCONTEXT:\n'+userText;
           if (combinedText) contents[0].parts.push({text:combinedText});
-          
           const payload: any = { contents, generationConfig: { maxOutputTokens: 8192, temperature: 0.7 } };
           if (useSearch) payload.tools = [{ google_search: {} }];
-
           const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,{
             method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
           const data = await res.json();
@@ -179,7 +181,7 @@ export default function ProfessorPage() {
 
   const sendChatMessage = async () => {
     if (!chatInput.trim() && !chatFile) return;
-    
+
     if (!(await checkChatLimit())) return;
 
     const text = chatInput;
@@ -194,16 +196,13 @@ export default function ProfessorPage() {
 
     try {
       let promptContext = "You are Professor Hazel, an expert academic tutor. You are helpful, encouraging, and highly knowledgeable. Explain things clearly, format with markdown, and use bullet points where helpful.";
-      
       const previousMessages = newMessages.map(m => `${m.role === 'user' ? 'Student' : 'Professor'}: ${m.text.replace(/<[^>]*>?/gm, '')}`).join('\n\n');
-      
       const response = await callLLM(
         `${promptContext}\n\nHere is the conversation history:\n${previousMessages}`,
         text,
         fileToSend ? [fileToSend] : undefined,
         useWebSearch
       );
-      
       const finalMessages = [...newMessages, { role: 'ai' as const, text: renderMarkdownWithMath(response) }];
       setChatMessages(finalMessages);
       saveSession(finalMessages);
@@ -213,17 +212,28 @@ export default function ProfessorPage() {
     setIsTyping(false);
   };
 
+  // FIX 2: Drag and drop handlers
+  const handleChatDragOver = (e: React.DragEvent) => { e.preventDefault(); setChatDragOver(true); };
+  const handleChatDragLeave = () => setChatDragOver(false);
+  const handleChatDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setChatDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) setChatFile(file);
+  };
+
+  // FIX 4: Sidebar uses dark-only classes
   const MainSidebar = () => (
-    <aside className={`w-72 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+    <aside className={`w-72 bg-gray-900 border-r border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
       <div className="p-6 flex items-center justify-between">
         <Link href="/dashboard/" className="flex items-center gap-3 hover:opacity-90 transition">
           <img src="/hazelnote_logo.png" alt="HazelNote Logo" className="w-10 h-10 rounded-xl object-cover" />
           <div className="flex flex-col">
-            <h1 className="font-extrabold text-xl tracking-tight text-gray-900 dark:text-white leading-none">HazelNote</h1>
+            <h1 className="font-extrabold text-xl tracking-tight text-white leading-none">HazelNote</h1>
             <span className="text-[10px] text-gray-500 font-bold mt-1 uppercase tracking-wider">by free-ed</span>
           </div>
         </Link>
-        <button onClick={() => setSidebarOpen(false)} className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition dark:text-gray-400 dark:hover:bg-gray-800"><X className="w-5 h-5" /></button>
+        <button onClick={() => setSidebarOpen(false)} className="md:hidden p-2 text-gray-400 hover:bg-gray-800 rounded-lg transition"><X className="w-5 h-5" /></button>
       </div>
       <div className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">Workspace</div>
       <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
@@ -232,22 +242,22 @@ export default function ProfessorPage() {
         <Link href="/exam/" className="w-full text-left sidebar-item flex items-center gap-3"><ClipboardList className="w-5 h-5" /> Take an Exam</Link>
         <button className="w-full text-left sidebar-item active flex items-center gap-3"><Bot className="w-5 h-5" /> Professor Hazel</button>
       </nav>
-      <div className="p-4 border-t border-gray-200 dark:border-gray-800 space-y-1">
+      <div className="p-4 border-t border-gray-800 space-y-1">
         {tier === 'free' && <div className="mb-2"><Link href="/pricing/" className="w-full go-pro-badge py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm">⚡ Upgrade to Pro</Link></div>}
-        <Link href="/profile/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"><UserCircle className="w-5 h-5" /> Profile & Settings</Link>
-        <Link href="/support/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"><HelpCircle className="w-5 h-5" /> Support</Link>
+        <Link href="/profile/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-400 hover:text-white"><UserCircle className="w-5 h-5" /> Profile & Settings</Link>
+        <Link href="/support/" className="w-full text-left sidebar-item flex items-center gap-3 font-medium text-gray-400 hover:text-white"><HelpCircle className="w-5 h-5" /> Support</Link>
       </div>
     </aside>
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-slate-900">
+    <div className="flex h-screen overflow-hidden bg-slate-900">
       {sidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm" />}
-      
+
       {/* Primary Sidebar */}
       {!showChatLog && <MainSidebar />}
 
-      {/* Chat Log Sidebar (Collapses Main Sidebar) */}
+      {/* FIX 4: Chat Log Sidebar dark-only */}
       {showChatLog && (
         <aside className="w-80 bg-gray-900 border-r border-gray-800 flex flex-col h-full z-40 fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out">
           <div className="p-4 border-b border-gray-800 flex items-center justify-between">
@@ -264,8 +274,8 @@ export default function ProfessorPage() {
               <p className="text-gray-500 text-sm text-center mt-10">No past conversations.</p>
             ) : (
               chatSessions.map(session => (
-                <button 
-                  key={session.id} 
+                <button
+                  key={session.id}
                   onClick={() => loadSession(session)}
                   className={`w-full text-left p-3 rounded-xl transition ${currentSessionId === session.id ? 'bg-indigo-900/40 border border-indigo-700/50 text-white' : 'hover:bg-gray-800 text-gray-300 border border-transparent'}`}
                 >
@@ -278,6 +288,7 @@ export default function ProfessorPage() {
         </aside>
       )}
 
+      {/* FIX 4: Main area dark-only */}
       <main className="flex-1 h-full flex flex-col relative bg-[#0F172A] z-10">
         <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-sm z-20">
           <div className="flex items-center gap-3">
@@ -299,7 +310,7 @@ export default function ProfessorPage() {
              </button>
              {tier === 'free' && (
                 <div className="text-xs font-bold text-gray-400 bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700">
-                  {profile?.chat_stats?.date === new Date().toISOString().split('T')[0] ? 2 - profile.chat_stats.count : 2} / 2 msgs left
+                  {profile?.chat_stats?.date === new Date().toISOString().split('T')[0] ? 2 - (profile.chat_stats?.count || 0) : 2} / 2 msgs left
                 </div>
              )}
           </div>
@@ -335,8 +346,20 @@ export default function ProfessorPage() {
           <div ref={chatEndRef} />
         </div>
 
-        <div className="bg-gray-900 border-t border-gray-800 p-4 pb-6 z-20">
+        {/* FIX 2: Chat input area with drag and drop */}
+        <div
+          className={`bg-gray-900 border-t p-4 pb-6 z-20 transition-all ${chatDragOver ? 'border-indigo-500 bg-indigo-900/20' : 'border-gray-800'}`}
+          onDragOver={handleChatDragOver}
+          onDragEnter={handleChatDragOver}
+          onDragLeave={handleChatDragLeave}
+          onDrop={handleChatDrop}
+        >
           <div className="max-w-4xl mx-auto">
+            {chatDragOver && (
+              <div className="mb-3 p-3 rounded-xl border-2 border-dashed border-indigo-400 text-indigo-300 text-sm font-bold text-center">
+                Drop file to attach
+              </div>
+            )}
             {chatFile && (
               <div className="mb-3 flex items-center gap-2 bg-gray-800 p-2.5 rounded-xl border border-gray-700 w-max">
                 <Paperclip className="w-4 h-4 text-indigo-400" />
@@ -356,7 +379,6 @@ export default function ProfessorPage() {
               <label htmlFor="prof-chat-attachment" className="p-3 text-gray-400 hover:text-indigo-400 hover:bg-gray-700 rounded-xl cursor-pointer transition flex-shrink-0" title="Attach PDF or Image">
                 <Paperclip className="w-5 h-5" />
               </label>
-              
               <textarea
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
@@ -370,9 +392,8 @@ export default function ProfessorPage() {
                 placeholder="Ask Professor Hazel a question..."
                 rows={1}
               />
-              
-              <button 
-                onClick={sendChatMessage} 
+              <button
+                onClick={sendChatMessage}
                 disabled={(!chatInput.trim() && !chatFile) || isTyping}
                 className="bg-indigo-600 text-white p-3 rounded-xl hover:bg-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 shadow-md"
               >
