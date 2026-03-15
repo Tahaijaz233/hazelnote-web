@@ -253,7 +253,6 @@ export default function Exam() {
     { id: 'ib', label: 'IB' }, { id: 'sat', label: 'SAT / AP' }, { id: 'fbise', label: 'FBISE / Matric' },
   ];
 
-  // FIX 4: Sidebar dark-only
   const Sidebar = () => (
     <aside className={`w-72 bg-gray-900 border-r border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
       <div className="p-6 flex items-center justify-between">
@@ -420,7 +419,11 @@ export default function Exam() {
               <div className="space-y-8 glass-card p-6 md:p-10 bg-gray-800/50 border-gray-700">
                 {examQuestions.map((q, i) => (
                   <div key={i} className="bg-gray-800 border border-gray-700 p-6 rounded-2xl">
-                    <h4 className="font-bold text-white mb-4" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i + 1}. ${q.question}`) }} />
+                    {/* FIX: Separate number from markdown rendering to prevent 1,1,1 bug */}
+                    <h4 className="font-bold text-white mb-4">
+                      <span className="mr-1">{i + 1}.</span>
+                      <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(q.question) }} />
+                    </h4>
                     {q.type === 'mcq' && (
                       <div className="space-y-2">
                         {q.options.map((opt: string, j: number) => {
@@ -500,7 +503,11 @@ export default function Exam() {
                 const isCorrect = userAnswers[i] === q.answer;
                 return (
                   <div key={i} className={`glass-card p-5 border-gray-700 border-l-4 ${isCorrect ? 'border-l-green-500' : 'border-l-red-500'}`}>
-                    <p className="font-bold text-white mb-2" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i + 1}. ${q.question}`) }} />
+                    {/* FIX: Separate number from markdown rendering */}
+                    <p className="font-bold text-white mb-2">
+                      <span className="mr-1">{i + 1}.</span>
+                      <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(q.question) }} />
+                    </p>
                     <div className="text-sm space-y-1">
                       <p className={isCorrect ? 'text-green-400 font-bold' : 'text-red-400'} dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`Your answer: ${userAnswers[i] ? `**${userAnswers[i]}**. ${q.options[userAnswers[i].charCodeAt(0) - 65] || ''}` : 'Not answered'}`) }} />
                       {!isCorrect && <p className="text-green-400 font-bold" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`Correct: **${q.answer}**. ${q.options[q.answer.charCodeAt(0) - 65] || ''}`) }} />}
@@ -516,7 +523,11 @@ export default function Exam() {
                 return (
                   <div key={i} className={`glass-card p-6 border-gray-700 border-l-4 ${color === 'green' ? 'border-l-green-500' : color === 'yellow' ? 'border-l-yellow-500' : 'border-l-red-500'}`}>
                     <div className="flex items-start justify-between mb-3">
-                      <p className="font-bold text-white flex-1 mr-4" dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(`${i + 1}. ${q.question}`) }} />
+                      {/* FIX: Separate number from markdown rendering */}
+                      <p className="font-bold text-white flex-1 mr-4">
+                        <span className="mr-1">{i + 1}.</span>
+                        <span dangerouslySetInnerHTML={{ __html: renderMarkdownWithMath(q.question) }} />
+                      </p>
                       {result && (
                         <span className={`shrink-0 text-lg font-extrabold px-3 py-1 rounded-full ${color === 'green' ? 'bg-green-900/30 text-green-400' : color === 'yellow' ? 'bg-yellow-900/30 text-yellow-400' : 'bg-red-900/30 text-red-400'}`}>
                           {result.score}/{result.maxScore}
