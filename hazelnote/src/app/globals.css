@@ -237,7 +237,6 @@ body {
   padding: 8px 12px;
 }
 
-/* Font face attribute styling */
 font[face="Arial"] { font-family: Arial, sans-serif !important; }
 font[face="Times New Roman"] { font-family: 'Times New Roman', serif !important; }
 font[face="Courier New"] { font-family: 'Courier New', monospace !important; }
@@ -307,7 +306,6 @@ font[face="Playfair Display"] { font-family: 'Playfair Display', serif !importan
   animation: slide-in 0.3s ease-out;
 }
 
-/* Voice Recording Wave Animation */
 .wave-container {
   display: flex;
   align-items: center;
@@ -332,39 +330,6 @@ font[face="Playfair Display"] { font-family: 'Playfair Display', serif !importan
 @keyframes wave {
   0%, 100% { height: 10px; }
   50% { height: 36px; }
-}
-
-#dark-mode-toggle {
-  width: 36px;
-  height: 18px;
-  background: #334155;
-  border-radius: 9999px;
-  position: relative;
-  transition: background-color 0.3s ease;
-  cursor: pointer;
-  border: none;
-  outline: none;
-  flex-shrink: 0;
-}
-
-.dark #dark-mode-toggle {
-  background: #10B981;
-}
-
-#dark-mode-thumb {
-  width: 12px;
-  height: 12px;
-  background: white;
-  border-radius: 50%;
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-}
-
-.dark #dark-mode-thumb {
-  transform: translateX(18px);
 }
 
 @media print {
