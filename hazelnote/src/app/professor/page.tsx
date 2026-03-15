@@ -132,7 +132,6 @@ export default function ProfessorPage() {
       if (existing) {
         const updatedSession = { ...existing, messages: msgs };
         updated = prev.map(s => s.id === finalId ? updatedSession : s);
-        // Sync updated session
         if (user) syncSessionToFirebase(updatedSession);
       } else {
         updated = [newSessionData, ...prev];
@@ -182,7 +181,6 @@ export default function ProfessorPage() {
   };
   // ─────────────────────────────────────────────────────────────────────
 
-  // FIX: Pro limit is 10 messages/day (same as dashboard)
   const checkChatLimit = async () => {
     const limit = tier === 'pro' ? 10 : 2;
     const today = new Date().toISOString().split('T')[0];
@@ -340,7 +338,7 @@ export default function ProfessorPage() {
     <div className="flex h-screen overflow-hidden bg-slate-900">
       {sidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm" />}
 
-      {/* Close three-dot dropdown when clicking outside */}
+      {/* Close three-dot dropdown when clicking outside — z-[45] so it is BELOW the chat log sidebar (z-[55]) */}
       {menuOpenFor && (
         <div className="fixed inset-0 z-[45]" onClick={() => setMenuOpenFor(null)} />
       )}
@@ -348,9 +346,9 @@ export default function ProfessorPage() {
       {/* Primary Sidebar */}
       {!showChatLog && <MainSidebar />}
 
-      {/* Chat Log Sidebar with three-dot rename/delete */}
+      {/* Chat Log Sidebar — z-[55] so it sits above the z-[45] close overlay, enabling rename/delete clicks */}
       {showChatLog && (
-        <aside className="w-80 bg-gray-900 border-r border-gray-800 flex flex-col h-full z-40 fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out">
+        <aside className="w-80 bg-gray-900 border-r border-gray-800 flex flex-col h-full z-[55] fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out">
           <div className="p-4 border-b border-gray-800 flex items-center justify-between">
             <h2 className="font-bold text-white flex items-center gap-2"><Clock className="w-5 h-5 text-indigo-400"/> Chat History</h2>
             <button onClick={() => setShowChatLog(false)} className="p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg transition"><X className="w-5 h-5"/></button>
@@ -391,13 +389,13 @@ export default function ProfessorPage() {
                       {/* Three-dot menu button */}
                       <button
                         onClick={(e) => { e.stopPropagation(); setMenuOpenFor(menuOpenFor === session.id ? null : session.id); }}
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 text-gray-600 hover:text-gray-300 rounded-lg opacity-0 group-hover:opacity-100 transition z-50"
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 text-gray-600 hover:text-gray-300 rounded-lg opacity-0 group-hover:opacity-100 transition z-[60]"
                       >
                         <MoreVertical className="w-4 h-4"/>
                       </button>
-                      {/* Dropdown menu */}
+                      {/* Dropdown menu — z-[65] to sit above everything */}
                       {menuOpenFor === session.id && (
-                        <div className="absolute right-2 top-full mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 w-36 overflow-hidden">
+                        <div className="absolute right-2 top-full mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-[65] w-36 overflow-hidden">
                           <button
                             onClick={(e) => { e.stopPropagation(); setRenamingId(session.id); setRenameValue(session.title); setMenuOpenFor(null); }}
                             className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition flex items-center gap-2"
@@ -440,7 +438,6 @@ export default function ProfessorPage() {
              <button onClick={() => setShowChatLog(!showChatLog)} className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition text-sm ${showChatLog ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700'}`}>
                <Clock className="w-4 h-4"/> History
              </button>
-             {/* FIX: Show message limit for BOTH free and pro users */}
              {user && (
                <div className="text-xs font-bold text-gray-400 bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700">
                  {msgsLeft} / {dailyLimit} msgs left
