@@ -43,62 +43,46 @@ const renderMarkdownWithMath = (text: string) => {
     }
   };
 
-  // 1. Render KaTeX Math Blocks and Inline Math first to protect it from markdown formatting
-  
-  // Block Math: $$ ... $$
   html = html.replace(/(?<!\\)\$\$([\s\S]+?)(?<!\\)\$\$/g, (match, math) => {
     return renderKatex(math, true) || match;
   });
 
-  // Block Math: \[ ... \]
   html = html.replace(/\\\[([\s\S]+?)\\\]/g, (match, math) => {
     return renderKatex(math, true) || match;
   });
 
-  // Inline Math: \( ... \)
   html = html.replace(/\\\(([\s\S]+?)\\\)/g, (match, math) => {
     return renderKatex(math, false) || match;
   });
 
-  // Inline Math: $ ... $ (Upgraded to allow inner newlines)
   html = html.replace(/(?<!\\)\$([^$]+?)(?<!\\)\$/g, (match, math) => {
     return renderKatex(math, false) || match;
   });
 
-  // 2. Strip markdown code block wrappers if they slipped through
   html = html.replace(/^```[a-zA-Z]*\n/gm, '').replace(/```$/gm, '');
 
-  // 3. Headers
   html = html.replace(/^### (.*?)$/gm, '<h3 class="text-xl font-bold mt-6 mb-3 text-white">$1</h3>');
   html = html.replace(/^## (.*?)$/gm, '<h2 class="text-2xl font-bold mt-8 mb-4 text-white">$1</h2>');
   html = html.replace(/^# (.*?)$/gm, '<h1 class="text-3xl font-extrabold mt-10 mb-5 text-white">$1</h1>');
 
-  // 4. Bold
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>');
 
-  // 5. Tables
   html = html.replace(/^\|(.+)\|\s*$/gm, (match, content) => {
     const cells = content.split('|').map((c: string) => c.trim());
-    // Skip separator rows
     if (cells.every((c: string) => c.match(/^:?-+:?$/) || c === '')) return '';
     const cellHtml = cells.map((c: string) => `<td class="border border-gray-600 px-4 py-2">${c}</td>`).join('');
     return `<tr>${cellHtml}</tr>`;
   });
-  // Group adjacent rows into a table
   html = html.replace(/(<tr>.*?<\/tr>(?:\s*<tr>.*?<\/tr>)*)/gs, '<div class="overflow-x-auto my-6"><table class="w-full border-collapse border border-gray-600 bg-gray-800/30 text-sm text-left"><tbody>$1</tbody></table></div>');
 
-  // 6. Unordered Lists
   html = html.replace(/^[\*\-] (.*?)$/gm, '<li class="ml-6 list-disc mb-1 ul-item text-gray-200">$1</li>');
   html = html.replace(/(<li[^>]*ul-item[^>]*>.*?<\/li>(?:\s*<li[^>]*ul-item[^>]*>.*?<\/li>)*)/gs, '<ul class="my-4">$1</ul>');
 
-  // 7. Ordered Lists
   html = html.replace(/^\d+\. (.*?)$/gm, '<li class="ml-6 list-decimal mb-1 ol-item text-gray-200">$1</li>');
   html = html.replace(/(<li[^>]*ol-item[^>]*>.*?<\/li>(?:\s*<li[^>]*ol-item[^>]*>.*?<\/li>)*)/gs, '<ol class="my-4">$1</ol>');
 
-  // 8. Newlines
   html = html.replace(/\n/g, '<br/>');
 
-  // 9. Cleanup <br/> around block tags
   const blockTags = ['h1', 'h2', 'h3', 'ul', 'ol', 'li', 'div', 'table', 'tbody', 'tr', 'td'];
   blockTags.forEach(tag => {
     const regexEnd = new RegExp(`(<\\/${tag}>)<br\\/>`, 'gi');
@@ -107,7 +91,6 @@ const renderMarkdownWithMath = (text: string) => {
     html = html.replace(regexStart, '$1');
   });
 
-  // 10. Extra cleanup for common artifacts
   html = html.replace(/<\/div><br\/>/g, '</div>');
   html = html.replace(/<\/ul><br\/>/g, '</ul>');
   html = html.replace(/<\/ol><br\/>/g, '</ol>');
@@ -322,6 +305,8 @@ function DashboardContent() {
   const [inputMode, setInputMode] = useState<'pdf'|'voice'|'link'>('pdf');
 
   const [pdfFiles, setPdfFiles] = useState<File[]>([]);
+  const [pdfDragOver, setPdfDragOver] = useState(false);
+  const [chatDragOver, setChatDragOver] = useState(false);
   const [voiceText, setVoiceText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -416,7 +401,6 @@ function DashboardContent() {
   }, []);
 
   useEffect(() => {
-    // Check local storage for background generated sets periodically to auto-update dashboard
     const handleStorageChange = () => {
       setStudyHistory(safeParseJSON('hz_study_history',[]));
       setStats(safeParseJSON('hz_stats',{streak:0,notes:0,lastDate:null,monthlySets:{}}));
@@ -461,8 +445,9 @@ function DashboardContent() {
     }
   };
 
+  // FIX 1: Pro limit changed from 15 to 10
   const checkChatLimit = async () => {
-    const limit = tier === 'pro' ? 15 : 2;
+    const limit = tier === 'pro' ? 10 : 2;
     const today = new Date().toISOString().split('T')[0];
     let currentStats = profile?.chat_stats || { date: today, count: 0 };
     
@@ -520,7 +505,6 @@ function DashboardContent() {
               alert('Transcription error: ' + data.error);
             }
           } catch (err: any) {
-            console.error('Transcription failed:', err);
             alert('Transcription failed. Please try again.');
           } finally {
             setIsTranscribing(false);
@@ -537,24 +521,16 @@ function DashboardContent() {
           recognitionRef.current = new SpeechRecognition();
           recognitionRef.current.continuous = true;
           recognitionRef.current.interimResults = true;
-          
           recognitionRef.current.onresult = (event: any) => {
             let finalTranscript = '';
             for (let i = event.resultIndex; i < event.results.length; ++i) {
-              if (event.results[i].isFinal) {
-                finalTranscript += event.results[i][0].transcript;
-              }
+              if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
             }
-            if (finalTranscript) {
-               setVoiceText((prev) => prev + (prev ? ' ' : '') + finalTranscript);
-            }
+            if (finalTranscript) setVoiceText((prev) => prev + (prev ? ' ' : '') + finalTranscript);
           };
           recognitionRef.current.start();
-        } catch (e) {
-          console.warn("Speech recognition not fully supported or blocked", e);
-        }
+        } catch (e) {}
       }
-      
     } catch (e) {
       alert('Microphone access denied or not supported in this browser.');
     }
@@ -633,13 +609,10 @@ function DashboardContent() {
     if (!confirm('Are you sure you want to delete this study set?')) return;
     const newHistory = studyHistory.filter(s=>s.id!==setId);
     setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
-    
-    // Cleanup generated audio cache
     for (const v of TTS_VOICES) {
       try { await deleteAudioFromDB(`podcast_${setId}_${v}`); } catch(e){}
     }
     try { await deleteAudioFromDB(`podcast_${setId}`); } catch(e){}
-
     if (user&&tier==='pro') { try { await deleteDoc(doc(db,'profiles',user.uid,'study_sets',setId.toString())); } catch(err){} }
     if (currentStudySet?.id===setId) { setCurrentView('dashboard'); router.push('/dashboard/'); }
   };
@@ -673,10 +646,8 @@ function DashboardContent() {
           let combinedText = systemPrompt||'';
           if (userText) combinedText += '\n\nCONTEXT:\n'+userText;
           if (combinedText) contents[0].parts.push({text:combinedText});
-          
           const payload: any = { contents, generationConfig: { maxOutputTokens: 8192, temperature: 0.7 } };
           if (useSearch) payload.tools = [{ google_search: {} }];
-
           const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,{
             method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
           const data = await res.json();
@@ -722,8 +693,7 @@ function DashboardContent() {
       setIsLoading(true);
       setLoadingProgress(0);
     }
-    
-    // Run generation as a detached async task so it completes even if component unmounts
+
     (async () => {
       let progress = 0;
       const progressInterval = !runInBackground ? setInterval(()=>{
@@ -770,8 +740,6 @@ function DashboardContent() {
   Ensure exactly 5 parts using "===SPLIT===" as the separator.`;
 
         const mainResult = await callLLM(mainPrompt,finalContext.substring(0,150000),pdfFiles);
-        
-        // Strip markdown blocks if Gemini accidentally wraps the whole response
         let cleanMainResult = mainResult.replace(/^```[a-zA-Z]*\n/gm, '').replace(/```$/gm, '').trim();
 
         let parts = cleanMainResult.split(/\s*===SPLIT===\s*/i).map((p:string)=>p.trim());
@@ -780,15 +748,12 @@ function DashboardContent() {
         let generatedTitle = parts[0]?.replace(/^(Title:|Here is.*?|Study Set:?|\*\*.*?:\*\*|Section 1:?|Short Title:?)\s*/i,'').replace(/[*#]/g,'').trim().substring(0,100)||`Study Set - ${new Date().toLocaleDateString()}`;
         let summaryClean = (parts[1]||'').replace(/^(Here are the comprehensive.*?:?\s*|Here is the summary.*?:?\s*|SUMMARY:?\s*|\*\*SUMMARY\*\*:?\s*|Executive Summary:?)\s*/is,'').trim();
         parts[1] = summaryClean;
-
-        // Ensure part 2 (notes) is also free of unwanted trailing/leading markdown blocks that ruin HTML styling
         parts[2] = (parts[2] || '').replace(/^```[a-zA-Z]*\n/gm, '').replace(/```$/gm, '').trim();
 
         const podPrompt = `Convert this content into an engaging teaching monologue for an audio podcast. Use short sentences, a conversational tone, and plain text only. Limit strictly to approximately ${podWordLimit} words. Content: ${parts[1]||finalContext.substring(0,3000)}`;
         const podResult = await callLLM(podPrompt,'');
         let cleanPodResult = podResult.replace(/\*[^*]*\*/g,'').replace(/\([^)]*\)/g,'').replace(/\[[^\]]*\]/g,'').replace(/\s+/g,' ').trim();
 
-        // Enforce hard cap for Free tier (~2 minutes of audio)
         if (tier === 'free') {
             const words = cleanPodResult.split(/\s+/);
             if (words.length > 300) {
@@ -804,7 +769,6 @@ function DashboardContent() {
           flashcardCount,quizCount,parts,podcast:cleanPodResult,chatCount:0,
         };
 
-        // Important: Read fresh state from localStorage to prevent overwriting other background saves
         const latestHistory = safeParseJSON('hz_study_history',[]);
         const newHistory = [studySet,...latestHistory].slice(0,50);
         saveToStorage('hz_study_history',newHistory);
@@ -879,25 +843,18 @@ function DashboardContent() {
       else cleanNotes=parts[0].replace(/^```[a-z]*\n/im,'').replace(/```$/m,'').trim();
       const newParts = [...currentStudySet.parts];
       newParts[2] = cleanNotes;
-      
       const podWordLimit = tier==='pro'?1500:300;
       const podPrompt = `Update this podcast script to seamlessly integrate the new source material. Keep it as a teaching monologue. Short sentences, conversational tone, plain text only. Limit strictly to approximately ${podWordLimit} words.\n\nExisting Podcast: ${currentStudySet.podcast}\n\nNew Content: ${finalContext.substring(0, 3000)}`;
       const updatedPodcast = await callLLM(podPrompt, '');
-
       const updatedSet = {...currentStudySet,title:newTitle,parts:newParts, podcast: updatedPodcast.trim()};
       setCurrentStudySet(updatedSet);
       const newHistory = studyHistory.map(s=>s.id===updatedSet.id?updatedSet:s);
       setStudyHistory(newHistory); saveToStorage('hz_study_history',newHistory);
       if (tier==='pro') syncToFirebase(updatedSet);
-      
-      for (const v of TTS_VOICES) {
-        await deleteAudioFromDB(`podcast_${updatedSet.id}_${v}`);
-      }
+      for (const v of TTS_VOICES) { await deleteAudioFromDB(`podcast_${updatedSet.id}_${v}`); }
       await deleteAudioFromDB(`podcast_${updatedSet.id}`);
-      
       setAudioUrl(null);
       setIsPlaying(false);
-
       setContextPdfFiles([]); setContextVoiceText(''); setAddContextModalOpen(false); setIsAddingContextLoading(false);
       alert('Context seamlessly integrated!');
     } catch(e:any) { setIsAddingContextLoading(false); alert('Error: '+e.message); }
@@ -1022,19 +979,14 @@ function DashboardContent() {
 
     setIsAudioLoading(true); setPodcastProgress(0);
     const progressInterval = setInterval(()=>setPodcastProgress(p=>p<95?p+2:p),600);
-    
-    // GUARANTEED SELECTION: Ensures UI selection holds irrespective of temporary tier sync issues
     const voiceToUse = selectedVoice || 'Kore';
     const audioCacheKey = `podcast_${currentStudySet.id}_${voiceToUse}`;
-    
+
     try {
       let cachedBase64 = await getAudioFromDB(audioCacheKey);
-      
-      // Fallback check: if default voice wasn't found under new key format, try old format
       if (!cachedBase64 && voiceToUse === 'Kore') {
           cachedBase64 = await getAudioFromDB(`podcast_${currentStudySet.id}`);
       }
-
       if (cachedBase64) {
         clearInterval(progressInterval); setPodcastProgress(100);
         const wavBlob = pcmToWav(base64ToArrayBuffer(cachedBase64), 24000);
@@ -1044,7 +996,6 @@ function DashboardContent() {
         setIsAudioLoading(false);
         return;
       }
-      
       const keyRes = await fetch('/api/gemini');
       const keyData = await keyRes.json();
       const apiKeys = keyData.apiKeys||[keyData.apiKey];
@@ -1068,16 +1019,14 @@ function DashboardContent() {
       if (!successData) throw new Error(`Audio generation failed. Last error: ${lastErrorMsg}`);
       const base64 = successData.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (!base64) throw new Error('No audio payload returned');
-      
       await saveAudioToDB(audioCacheKey, base64);
-      
       const wavBlob = pcmToWav(base64ToArrayBuffer(base64),24000);
       const urlBlob = URL.createObjectURL(wavBlob);
       clearInterval(progressInterval); setPodcastProgress(100);
       setAudioUrl(urlBlob); setIsPlaying(true);
       setTimeout(()=>{ if(audioRef.current){ audioRef.current.playbackRate=playbackRate; audioRef.current.play(); } },200);
-    } catch(e:any) { 
-      clearInterval(progressInterval); alert('Audio Error: '+e.message); 
+    } catch(e:any) {
+      clearInterval(progressInterval); alert('Audio Error: '+e.message);
     }
     setTimeout(()=>setIsAudioLoading(false),500);
   };
@@ -1108,6 +1057,7 @@ function DashboardContent() {
     } catch(e){ alert('Microphone access denied or not supported.'); }
   };
 
+  // FIX 3: Apply renderMarkdownWithMath to the AI text response so KaTeX renders correctly
   const processVoiceQuestion = async (base64:string,mimeType:string) => {
     if (!(await checkChatLimit())) {
       setAskModalOpen(false);
@@ -1121,9 +1071,10 @@ function DashboardContent() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       const textResponse = data.result;
-      setAskResponse(`<b>Professor Hazel:</b> ${textResponse}`);
-      
-      const voiceToUse = selectedVoice || 'Kore'; // GUARANTEED SELECTION Fix
+      // FIX 3: Use renderMarkdownWithMath to properly render KaTeX in the response
+      setAskResponse(`<b>Professor Hazel:</b> ${renderMarkdownWithMath(textResponse)}`);
+
+      const voiceToUse = selectedVoice || 'Kore';
       const keyRes = await fetch('/api/gemini');
       const keyData = await keyRes.json();
       const apiKeys = keyData.apiKeys||[keyData.apiKey];
@@ -1168,13 +1119,10 @@ function DashboardContent() {
   const sendChatMessage = async () => {
     if (!chatInput.trim()&&!chatFile) return;
     if (!currentStudySet) return;
-    
     if (!(await checkChatLimit())) return;
-
     const text = chatInput; const fileToSend = chatFile;
     setChatInput(''); setChatFile(null);
     setChatMessages(prev=>[...prev,{role:'user',text:text+(fileToSend?`<div class="text-xs text-green-300 mt-1 font-medium">📎 ${fileToSend.name}</div>`:'')}]);
-    
     setChatMessages(prev=>[...prev,{role:'ai',text:'<span class="animate-pulse">Thinking...</span>'}]);
     try {
       const prompt = `You are Professor Hazel. Answer based strictly on:\n${currentStudySet.parts.join('\n')}`;
@@ -1183,6 +1131,30 @@ function DashboardContent() {
     } catch(e:any) {
       setChatMessages(prev=>{const n=[...prev];n[n.length-1]={role:'ai',text:`<span class="text-red-500">Error: ${e.message}</span>`};return n;});
     }
+  };
+
+  // FIX 2: Drag and drop handlers for PDF upload
+  const handlePdfDragOver = (e: React.DragEvent) => { e.preventDefault(); setPdfDragOver(true); };
+  const handlePdfDragLeave = () => setPdfDragOver(false);
+  const handlePdfDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setPdfDragOver(false);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+    if (files.length === 0) return alert('Please drop PDF files only.');
+    const maxMB = tier === 'free' ? 10 : 100;
+    const currentSize = pdfFiles.reduce((a, b) => a + b.size, 0) + files.reduce((a, b) => a + b.size, 0);
+    if (currentSize > maxMB * 1024 * 1024) return alert(`Limit exceeded: ${maxMB}MB max.`);
+    setPdfFiles(prev => [...prev, ...files]);
+  };
+
+  // FIX 2: Drag and drop handlers for chat panel
+  const handleChatDragOver = (e: React.DragEvent) => { e.preventDefault(); setChatDragOver(true); };
+  const handleChatDragLeave = () => setChatDragOver(false);
+  const handleChatDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setChatDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) setChatFile(file);
   };
 
   const FlashcardsViewer = ({text}:{text:string}) => {
@@ -1303,6 +1275,7 @@ function DashboardContent() {
     );
   };
 
+  // FIX 4: Sidebar uses dark-only classes
   const Sidebar = () => (
     <aside className={`bg-gray-900 border-r border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-all duration-300 ease-in-out ${sidebarOpen?'translate-x-0':'-translate-x-full md:translate-x-0'} ${sidebarCollapsed?'md:w-0 md:opacity-0 md:overflow-hidden':'w-72'}`}>
       <div className="p-6 flex items-center justify-between">
@@ -1442,12 +1415,19 @@ function DashboardContent() {
               <button onClick={()=>setInputMode('voice')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode==='voice'?'bg-green-500 text-white shadow-md':'bg-transparent text-gray-400 hover:bg-gray-700'}`}><Mic className="w-4 h-4"/> Voice Record</button>
               <button onClick={()=>setInputMode('link')} className={`flex-1 py-4 px-6 rounded-3xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${inputMode==='link'?'bg-green-500 text-white shadow-md':'bg-transparent text-gray-400 hover:bg-gray-700'}`}><LinkIcon className="w-4 h-4"/> YouTube</button>
             </div>
-            
+
+            {/* FIX 2: PDF upload area with drag and drop */}
             {inputMode==='pdf'&&(
-              <div className="glass-card p-8 md:p-12 text-center border-2 border-dashed border-gray-600 bg-gray-800/50 backdrop-blur-lg">
-                <FileText className="w-16 h-16 text-gray-500 mx-auto mb-4"/>
-                <h3 className="text-xl font-bold mb-2 text-white">Upload Handwritten or Typed Notes</h3>
-                <p className="text-gray-400 mb-8 max-w-sm mx-auto">Upload documents to AI natively! <span className="text-blue-400 block mt-2">Max Limit: {tier==='free'?'10MB':'100MB'}</span></p>
+              <div
+                className={`glass-card p-8 md:p-12 text-center border-2 border-dashed bg-gray-800/50 backdrop-blur-lg transition-all ${pdfDragOver ? 'border-green-400 bg-green-900/20 scale-[1.01]' : 'border-gray-600'}`}
+                onDragOver={handlePdfDragOver}
+                onDragEnter={handlePdfDragOver}
+                onDragLeave={handlePdfDragLeave}
+                onDrop={handlePdfDrop}
+              >
+                <FileText className={`w-16 h-16 mx-auto mb-4 ${pdfDragOver ? 'text-green-400' : 'text-gray-500'}`}/>
+                <h3 className="text-xl font-bold mb-2 text-white">{pdfDragOver ? 'Drop PDF files here!' : 'Upload Handwritten or Typed Notes'}</h3>
+                <p className="text-gray-400 mb-8 max-w-sm mx-auto">Upload documents to AI natively! You can also <span className="text-green-400 font-bold">drag & drop PDFs</span> here. <span className="text-blue-400 block mt-2">Max Limit: {tier==='free'?'10MB':'100MB'}</span></p>
                 <input type="file" id="pdf-upload" multiple accept=".pdf" className="hidden" onChange={(e)=>{
                   const files = Array.from(e.target.files||[]);
                   const maxMB = tier==='free'?10:100;
@@ -1477,11 +1457,7 @@ function DashboardContent() {
                   ) : (
                     <button onClick={stopRecordingVoice} className="w-20 h-20 rounded-full bg-gray-800 border-4 border-red-500 flex items-center justify-center mx-auto shadow-xl transition-transform hover:scale-105">
                       <div className="wave-container">
-                         <div className="wave-bar"></div>
-                         <div className="wave-bar"></div>
-                         <div className="wave-bar"></div>
-                         <div className="wave-bar"></div>
-                         <div className="wave-bar"></div>
+                         <div className="wave-bar"></div><div className="wave-bar"></div><div className="wave-bar"></div><div className="wave-bar"></div><div className="wave-bar"></div>
                       </div>
                     </button>
                   )}
@@ -1490,10 +1466,10 @@ function DashboardContent() {
                   </p>
                 </div>
                 <div className="relative">
-                  <textarea 
-                    value={voiceText} 
-                    onChange={e => setVoiceText(e.target.value)} 
-                    className="w-full h-40 p-5 border border-gray-600 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-700 text-white resize-none" 
+                  <textarea
+                    value={voiceText}
+                    onChange={e => setVoiceText(e.target.value)}
+                    className="w-full h-40 p-5 border border-gray-600 rounded-2xl focus:outline-none focus:border-green-500 bg-gray-700 text-white resize-none"
                     placeholder="Type or dictate your notes..."
                     disabled={isTranscribing}
                   />
@@ -1518,7 +1494,7 @@ function DashboardContent() {
                 <Wand2 className="w-5 h-5"/> Generate Study Set
               </button>
               {tier==='pro'&&(
-                <button onClick={()=>{generateStudySet(true);}} className="px-8 py-4 rounded-full border-2 border-indigo-500 bg-indigo-900/30 text-indigo-300 hover:bg-indigo-800/50 font-bold text-sm transition flex items-center justify-center gap-2 w-full sm:w-auto" title="Generate in background while you explore">
+                <button onClick={()=>{generateStudySet(true);}} className="px-8 py-4 rounded-full border-2 border-indigo-500 bg-indigo-900/30 text-indigo-300 hover:bg-indigo-800/50 font-bold text-sm transition flex items-center justify-center gap-2 w-full sm:w-auto">
                   <RefreshCw className="w-4 h-4"/> Generate in Background (Pro)
                 </button>
               )}
@@ -1662,7 +1638,6 @@ function DashboardContent() {
                           </button>
                           <button onClick={()=>{if(audioRef.current)audioRef.current.currentTime+=10;}} className="text-white hover:text-indigo-300 transition" title="+10s"><FastForward className="w-7 h-7"/></button>
                         </div>
-                        
                         <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 mt-2">
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-indigo-300 font-bold uppercase tracking-wider mr-1">Speed:</span>
@@ -1673,7 +1648,6 @@ function DashboardContent() {
                               </button>
                             ))}
                           </div>
-                          
                           {tier === 'pro' && (
                             <div className="flex items-center gap-2 sm:border-l sm:border-indigo-500/30 sm:pl-6">
                               <span className="text-xs text-indigo-300 font-bold uppercase tracking-wider mr-1 flex items-center gap-1"><Volume2 className="w-3 h-3"/> Voice:</span>
@@ -1689,7 +1663,6 @@ function DashboardContent() {
                             </div>
                           )}
                         </div>
-
                         {tier==='pro'&&(
                           <div className="pt-6 border-t border-indigo-500/30 w-full mt-4">
                             <button onClick={handleAskProfessor} className="flex items-center justify-center gap-2 mx-auto bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold transition shadow-md">
@@ -1708,7 +1681,7 @@ function DashboardContent() {
         )}
       </main>
 
-      {/* Chat Panel */}
+      {/* FIX 2: Chat Panel with drag and drop */}
       {chatOpen&&(
         <div className={`fixed right-0 top-0 bottom-0 w-full md:w-[420px] bg-gray-800 shadow-2xl z-50 flex flex-col border-l border-gray-700 transition-transform duration-300 ${chatOpen?'translate-x-0':'translate-x-full'}`}>
           <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
@@ -1726,7 +1699,18 @@ function DashboardContent() {
               </div>
             ))}
           </div>
-          <div className="p-4 bg-gray-800 border-t border-gray-700">
+          <div
+            className={`p-4 bg-gray-800 border-t border-gray-700 transition-all ${chatDragOver ? 'bg-green-900/20 border-green-500' : ''}`}
+            onDragOver={handleChatDragOver}
+            onDragEnter={handleChatDragOver}
+            onDragLeave={handleChatDragLeave}
+            onDrop={handleChatDrop}
+          >
+            {chatDragOver && (
+              <div className="mb-3 p-3 rounded-xl border-2 border-dashed border-green-400 text-green-400 text-sm font-bold text-center">
+                Drop file to attach
+              </div>
+            )}
             {chatFile&&(
               <div className="mb-3 flex items-center gap-2 bg-gray-700 p-2 rounded-lg text-xs font-medium text-gray-300">
                 <Paperclip className="w-3.5 h-3.5 text-green-400"/> {chatFile.name}
@@ -1857,7 +1841,6 @@ function DashboardContent() {
             </div>
             <div className="p-6 flex-1 overflow-y-auto flex flex-col items-center">
               <p className="text-sm text-gray-400 mb-8 text-center">Tap the microphone and ask your question aloud.</p>
-              
               {!isAskRecording ? (
                 <button onClick={toggleAskRecording} className="w-24 h-24 rounded-full bg-indigo-600 hover:bg-indigo-500 flex items-center justify-center transition-all shadow-xl hover:scale-105">
                   <Mic className="w-10 h-10 text-white" />
@@ -1865,15 +1848,10 @@ function DashboardContent() {
               ) : (
                 <button onClick={toggleAskRecording} className="w-24 h-24 rounded-full bg-gray-800 border-4 border-indigo-500 flex items-center justify-center transition-all shadow-xl animate-pulse">
                    <div className="wave-container">
-                     <div className="wave-bar bg-indigo-400"></div>
-                     <div className="wave-bar bg-indigo-400"></div>
-                     <div className="wave-bar bg-indigo-400"></div>
-                     <div className="wave-bar bg-indigo-400"></div>
-                     <div className="wave-bar bg-indigo-400"></div>
+                     <div className="wave-bar bg-indigo-400"></div><div className="wave-bar bg-indigo-400"></div><div className="wave-bar bg-indigo-400"></div><div className="wave-bar bg-indigo-400"></div><div className="wave-bar bg-indigo-400"></div>
                    </div>
                 </button>
               )}
-              
               <div className="mt-4 font-bold text-lg text-white">{isAskRecording?'Listening... Tap to stop':'Tap to start recording'}</div>
               {askResponse&&(
                 <div className="mt-8 w-full bg-indigo-900/20 border border-indigo-800/50 p-5 rounded-xl text-left animate-slide-in relative">
