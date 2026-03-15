@@ -12,6 +12,8 @@ import { auth, db } from '@/lib/firebase';
 declare global {
   interface Window {
     FS: any;
+    jQuery: any;
+    $: any;
   }
 }
 
@@ -22,6 +24,7 @@ export default function Pricing() {
   const [isPro, setIsPro] = useState(false);
   const [loading, setLoading] = useState(false);
   const [billing, setBilling] = useState<'monthly' | 'annual'>('monthly');
+  const [fsLoaded, setFsLoaded] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -45,8 +48,8 @@ export default function Pricing() {
       return;
     }
 
-    if (!window.FS) {
-      alert("Checkout SDK is still loading. Please try again in a moment.");
+    if (!fsLoaded || !window.FS || !window.FS.Checkout) {
+      alert("Checkout is still loading. Please wait a moment and try again.");
       return;
     }
 
@@ -71,19 +74,30 @@ export default function Pricing() {
       });
     } catch (err) {
       console.error("Freemius Checkout Error:", err);
-      alert("Failed to load checkout. Please check your configuration.");
+      alert("Failed to load checkout. Please try again or contact support.");
     } finally {
       setLoading(false);
     }
   };
 
-  // FIX: Updated the annual billing price to $4.25
   const proPrice = billing === 'annual' ? '$4.25' : '$5';
   const proPeriod = billing === 'annual' ? '/mo (billed annually)' : '/mo';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0F172A] to-[#1E293B]">
-      <Script src="https://checkout.freemius.com/checkout.min.js" strategy="lazyOnload" />
+      {/* FIX: Load jQuery first via onLoad, then dynamically inject Freemius checkout.
+          This ensures jQuery is available before Freemius tries to use it. */}
+      <Script
+        src="https://code.jquery.com/jquery-3.7.1.min.js"
+        strategy="afterInteractive"
+        onLoad={() => {
+          const script = document.createElement('script');
+          script.src = 'https://checkout.freemius.com/checkout.min.js';
+          script.onload = () => setFsLoaded(true);
+          script.onerror = () => console.error('Failed to load Freemius checkout script');
+          document.body.appendChild(script);
+        }}
+      />
 
       <nav className="fixed top-4 left-1/2 transform -translate-x-1/2 w-[95%] max-w-7xl z-50 bg-[#0F172A]/70 backdrop-blur-xl border border-gray-800 rounded-full shadow-2xl">
         <div className="px-6 py-3">
@@ -114,78 +128,91 @@ export default function Pricing() {
         </div>
       </nav>
 
-      <section className="pt-32 pb-12 px-6">
-        <div className="max-w-6xl mx-auto text-center">
-          <h1 className="text-5xl md:text-6xl font-extrabold text-white mb-6 leading-tight mt-8">Choose Your <span className="gradient-text">Study Plan</span></h1>
-          <p className="text-xl text-gray-400 mb-8 max-w-2xl mx-auto">Start for free or unlock unlimited features with the Pro plan.</p>
-          
-          <div className="flex justify-center mb-10">
-            <div className="bg-gray-800/50 backdrop-blur-lg p-1.5 rounded-full inline-flex border border-gray-700">
-              <button
-                onClick={() => setBilling('monthly')}
-                className={`px-6 py-2 rounded-full font-bold text-sm transition ${billing === 'monthly' ? 'bg-[#10B981] text-white' : 'text-gray-400 hover:text-white'}`}
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setBilling('annual')}
-                className={`px-6 py-2 rounded-full font-bold text-sm transition flex items-center gap-2 ${billing === 'annual' ? 'bg-[#10B981] text-white' : 'text-gray-400 hover:text-white'}`}
-              >
-                Annually <span className="text-[10px] bg-green-100/20 text-green-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">-15%</span>
-              </button>
-            </div>
+      <section className="pt-40 pb-24 px-6">
+        <div className="max-w-5xl mx-auto text-center mb-16">
+          <h1 className="text-4xl md:text-6xl font-extrabold text-white mb-6">
+            Simple, Transparent <span className="text-green-400">Pricing</span>
+          </h1>
+          <p className="text-gray-400 text-xl max-w-2xl mx-auto">
+            Start for free. Upgrade when you need more power.
+          </p>
+
+          <div className="inline-flex items-center gap-2 mt-8 bg-gray-800 border border-gray-700 rounded-full p-1.5">
+            <button
+              onClick={() => setBilling('monthly')}
+              className={`px-5 py-2 rounded-full text-sm font-bold transition ${billing === 'monthly' ? 'bg-green-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBilling('annual')}
+              className={`px-5 py-2 rounded-full text-sm font-bold transition ${billing === 'annual' ? 'bg-green-500 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+            >
+              Annual <span className="ml-1 text-green-400 text-xs font-bold">Save 15%</span>
+            </button>
           </div>
         </div>
-      </section>
 
-      <section className="pb-20 px-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="bg-gray-800/50 backdrop-blur-lg border-2 border-gray-700 rounded-3xl p-8 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(16,185,129,0.3)]">
-              <h3 className="text-2xl font-extrabold text-white mb-2">Free</h3>
-              <div className="mb-8 mt-4"><span className="text-5xl font-extrabold text-white">$0</span><span className="text-gray-400">/mo</span></div>
-              <Link href="/login/" className="block w-full py-3 px-6 text-center bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl transition mb-8">Get Started Free</Link>
-              <div className="space-y-4">
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">2 study sets per month</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">PDF upload (up to 10MB)</span></div>
-                {/* FIX: Updated Free limits to 5 flashcards/quizzes and basic chat */}
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">Max 5 Flashcards & 5 Quiz questions</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-gray-300">Basic Professor Hazel Chat</span></div>
-              </div>
+        <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8">
+          {/* Free Plan */}
+          <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700 rounded-3xl p-8">
+            <div className="mb-6">
+              <h3 className="text-xl font-bold text-white mb-1">Free</h3>
+              <p className="text-gray-400 text-sm">Perfect for getting started</p>
             </div>
-            
-            <div className="bg-gradient-to-br from-green-900/40 to-blue-900/40 backdrop-blur-lg border-2 border-green-500 rounded-3xl p-8 relative transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_20px_50px_rgba(16,185,129,0.3)]">
-              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2"><span className="bg-gradient-to-r from-green-500 to-blue-500 text-white px-4 py-1 rounded-full text-sm font-bold">UNLIMITED ACCESS</span></div>
-              <h3 className="text-2xl font-extrabold text-white mb-2">Pro</h3>
-              <div className="mb-8 mt-4">
-                <span className="text-5xl font-extrabold text-white">{proPrice}</span>
-                <span className="text-gray-300 text-sm">{proPeriod}</span>
-              </div>
-              
-              {isPro ? (
-                <button disabled className="block w-full py-3 px-6 text-center btn-primary text-white font-bold rounded-xl mb-8 opacity-70 cursor-not-allowed">
-                  You are on the Pro Plan
-                </button>
-              ) : (
-                <button 
-                  onClick={openCheckout}
-                  disabled={loading}
-                  className="block w-full py-3 px-6 text-center btn-primary text-white font-bold rounded-xl mb-8 transition"
-                >
-                  {loading ? 'Loading...' : 'Upgrade to Pro'}
-                </button>
-              )}
+            <div className="mb-8">
+              <span className="text-5xl font-extrabold text-white">$0</span>
+              <span className="text-gray-400 text-lg ml-2">/forever</span>
+            </div>
+            <Link
+              href={isLoggedIn ? "/dashboard/" : "/login/"}
+              className="block w-full py-3 px-6 text-center bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-xl mb-8 transition border border-gray-600"
+            >
+              {isLoggedIn ? 'Go to Dashboard' : 'Get Started Free'}
+            </Link>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-gray-400 mt-0.5" /><span className="text-gray-300">2 study sets per month</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-gray-400 mt-0.5" /><span className="text-gray-300">PDF upload (up to 10MB)</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-gray-400 mt-0.5" /><span className="text-gray-300">2 Messages/Day with Professor Hazel</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-gray-400 mt-0.5" /><span className="text-gray-300">5 Flashcards & 5 Quiz Questions</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-gray-400 mt-0.5" /><span className="text-gray-300">Basic AI Podcast</span></div>
+            </div>
+          </div>
 
-              <div className="space-y-4">
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white font-semibold">Unlimited study sets</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">PDF upload (up to 100MB)</span></div>
-                {/* FIX: Updated Pro limits accurately to what was requested */}
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">10 Messages/Day with Professor Hazel</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">High-quality Voice Podcasts</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Unlimited Flashcards & Quizzes</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Advanced Note Editing & Add Context</span></div>
-                <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400" /><span className="text-white">Sync Across Devices</span></div>
-              </div>
+          {/* Pro Plan */}
+          <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/20 backdrop-blur-lg border border-green-700/50 rounded-3xl p-8 relative overflow-hidden shadow-2xl shadow-green-900/20">
+            <div className="absolute top-4 right-4 bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">Most Popular</div>
+            <div className="mb-6">
+              <h3 className="text-xl font-bold text-white mb-1">Pro</h3>
+              <p className="text-gray-400 text-sm">For serious students</p>
+            </div>
+            <div className="mb-8">
+              <span className="text-5xl font-extrabold text-white">{proPrice}</span>
+              <span className="text-gray-400 text-lg ml-2">{proPeriod}</span>
+            </div>
+
+            {isPro ? (
+              <button disabled className="block w-full py-3 px-6 text-center btn-primary text-white font-bold rounded-xl mb-8 opacity-70 cursor-not-allowed">
+                You are on the Pro Plan
+              </button>
+            ) : (
+              <button
+                onClick={openCheckout}
+                disabled={loading}
+                className="block w-full py-3 px-6 text-center btn-primary text-white font-bold rounded-xl mb-8 transition"
+              >
+                {loading ? 'Loading...' : 'Upgrade to Pro'}
+              </button>
+            )}
+
+            <div className="space-y-4">
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 mt-0.5" /><span className="text-white font-semibold">Unlimited study sets</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 mt-0.5" /><span className="text-white">PDF upload (up to 100MB)</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 mt-0.5" /><span className="text-white">10 Messages/Day with Professor Hazel</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 mt-0.5" /><span className="text-white">High-quality Voice Podcasts</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 mt-0.5" /><span className="text-white">Unlimited Flashcards &amp; Quizzes</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 mt-0.5" /><span className="text-white">Advanced Note Editing &amp; Add Context</span></div>
+              <div className="flex items-start gap-3"><Check className="w-5 h-5 text-green-400 mt-0.5" /><span className="text-white">Sync Across Devices</span></div>
             </div>
           </div>
         </div>
