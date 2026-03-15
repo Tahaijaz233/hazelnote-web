@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard, PlusCircle, ClipboardList, UserCircle, HelpCircle,
-  Menu, X, Send, Paperclip, Bot, Sparkles, MessageSquarePlus, Clock, ChevronRight
+  Menu, X, Send, Paperclip, Bot, Sparkles, MessageSquarePlus, Clock, ChevronRight,
+  MoreVertical, Check,
 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { renderMarkdownWithMath, safeParseJSON, saveToStorage } from '@/lib/utils';
 import { UserProfile } from '@/types';
@@ -32,7 +33,12 @@ export default function ProfessorPage() {
   const [showChatLog, setShowChatLog] = useState(false);
   const [useWebSearch, setUseWebSearch] = useState(false);
 
-  // FIX 2: Drag and drop state for chat
+  // Three-dot menu state
+  const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  // Drag and drop state for chat
   const [chatDragOver, setChatDragOver] = useState(false);
 
   const [chatMessages, setChatMessages] = useState<{role:'user'|'ai';text:string}[]>([
@@ -43,6 +49,43 @@ export default function ProfessorPage() {
   const [isTyping, setIsTyping] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // ─── Firebase sync helpers ───────────────────────────────────────────
+  const syncSessionToFirebase = async (session: ChatSession) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'profiles', user.uid, 'professor_chats', session.id), {
+        id: session.id,
+        title: session.title,
+        date: session.date,
+        messages: session.messages,
+      });
+    } catch(e) {}
+  };
+
+  const deleteSyncFromFirebase = async (sessionId: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'profiles', user.uid, 'professor_chats', sessionId));
+    } catch(e) {}
+  };
+
+  const syncAllChatsFromFirebase = async (uid: string) => {
+    try {
+      const qs = await getDocs(collection(db, 'profiles', uid, 'professor_chats'));
+      const fSessions: ChatSession[] = [];
+      qs.forEach(d => fSessions.push(d.data() as ChatSession));
+      if (fSessions.length > 0) {
+        const local = safeParseJSON<ChatSession[]>('hz_prof_chats', []);
+        const merged = [...fSessions, ...local.filter(ls => !fSessions.some(fs => fs.id === ls.id))]
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 30);
+        setChatSessions(merged);
+        saveToStorage('hz_prof_chats', merged);
+      }
+    } catch(e) {}
+  };
+  // ─────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const loaded = safeParseJSON<ChatSession[]>('hz_prof_chats', []);
@@ -57,6 +100,8 @@ export default function ProfessorPage() {
           setProfile(p);
           setTier(p.is_pro ? 'pro' : 'free');
         }
+        // Load chats from Firebase (sync across devices)
+        syncAllChatsFromFirebase(u.uid);
       } else {
         router.push('/login');
       }
@@ -72,18 +117,26 @@ export default function ProfessorPage() {
 
   const saveSession = (msgs: {role:'user'|'ai'; text:string}[]) => {
     let id = currentSessionId;
-    let title = msgs.find(m => m.role === 'user')?.text.substring(0, 30).replace(/<[^>]*>?/gm, '') + '...';
+    const rawTitle = msgs.find(m => m.role === 'user')?.text.substring(0, 30).replace(/<[^>]*>?/gm, '') || 'New Chat';
+    const title = rawTitle + (rawTitle.length >= 30 ? '...' : '');
     if (!id) {
       id = Date.now().toString();
       setCurrentSessionId(id);
     }
+    const finalId = id;
+    const newSessionData: ChatSession = { id: finalId, title, date: new Date().toISOString(), messages: msgs };
+
     setChatSessions(prev => {
-      const existing = prev.find(s => s.id === id);
-      let updated;
+      const existing = prev.find(s => s.id === finalId);
+      let updated: ChatSession[];
       if (existing) {
-        updated = prev.map(s => s.id === id ? { ...s, messages: msgs } : s);
+        const updatedSession = { ...existing, messages: msgs };
+        updated = prev.map(s => s.id === finalId ? updatedSession : s);
+        // Sync updated session
+        if (user) syncSessionToFirebase(updatedSession);
       } else {
-        updated = [{ id, title: title || 'New Chat', date: new Date().toISOString(), messages: msgs }, ...prev];
+        updated = [newSessionData, ...prev];
+        if (user) syncSessionToFirebase(newSessionData);
       }
       saveToStorage('hz_prof_chats', updated);
       return updated;
@@ -102,7 +155,34 @@ export default function ProfessorPage() {
     if (window.innerWidth < 768) setShowChatLog(false);
   };
 
-  // FIX 1: Pro limit changed from 15 to 10
+  // ─── Rename / Delete handlers ─────────────────────────────────────────
+  const confirmRename = () => {
+    if (!renameValue.trim() || !renamingId) return;
+    setChatSessions(prev => {
+      const updated = prev.map(s => s.id === renamingId ? { ...s, title: renameValue.trim() } : s);
+      saveToStorage('hz_prof_chats', updated);
+      const renamed = updated.find(s => s.id === renamingId);
+      if (user && renamed) syncSessionToFirebase(renamed);
+      return updated;
+    });
+    setRenamingId(null);
+    setRenameValue('');
+  };
+
+  const deleteSessionHandler = (id: string) => {
+    if (!confirm('Delete this chat? This cannot be undone.')) return;
+    setChatSessions(prev => {
+      const updated = prev.filter(s => s.id !== id);
+      saveToStorage('hz_prof_chats', updated);
+      return updated;
+    });
+    if (currentSessionId === id) startNewChat();
+    if (user) deleteSyncFromFirebase(id);
+    setMenuOpenFor(null);
+  };
+  // ─────────────────────────────────────────────────────────────────────
+
+  // FIX: Pro limit is 10 messages/day (same as dashboard)
   const checkChatLimit = async () => {
     const limit = tier === 'pro' ? 10 : 2;
     const today = new Date().toISOString().split('T')[0];
@@ -212,7 +292,7 @@ export default function ProfessorPage() {
     setIsTyping(false);
   };
 
-  // FIX 2: Drag and drop handlers
+  // Drag and drop handlers
   const handleChatDragOver = (e: React.DragEvent) => { e.preventDefault(); setChatDragOver(true); };
   const handleChatDragLeave = () => setChatDragOver(false);
   const handleChatDrop = (e: React.DragEvent) => {
@@ -222,7 +302,13 @@ export default function ProfessorPage() {
     if (file) setChatFile(file);
   };
 
-  // FIX 4: Sidebar uses dark-only classes
+  // ─── Compute messages remaining ──────────────────────────────────────
+  const todayStr = new Date().toISOString().split('T')[0];
+  const dailyLimit = tier === 'pro' ? 10 : 2;
+  const usedToday = profile?.chat_stats?.date === todayStr ? (profile.chat_stats?.count || 0) : 0;
+  const msgsLeft = Math.max(0, dailyLimit - usedToday);
+  // ─────────────────────────────────────────────────────────────────────
+
   const MainSidebar = () => (
     <aside className={`w-72 bg-gray-900 border-r border-gray-800 flex flex-col h-full z-50 fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
       <div className="p-6 flex items-center justify-between">
@@ -254,10 +340,15 @@ export default function ProfessorPage() {
     <div className="flex h-screen overflow-hidden bg-slate-900">
       {sidebarOpen && <div onClick={() => setSidebarOpen(false)} className="fixed inset-0 bg-gray-900/50 z-40 md:hidden backdrop-blur-sm" />}
 
+      {/* Close three-dot dropdown when clicking outside */}
+      {menuOpenFor && (
+        <div className="fixed inset-0 z-[45]" onClick={() => setMenuOpenFor(null)} />
+      )}
+
       {/* Primary Sidebar */}
       {!showChatLog && <MainSidebar />}
 
-      {/* FIX 4: Chat Log Sidebar dark-only */}
+      {/* Chat Log Sidebar with three-dot rename/delete */}
       {showChatLog && (
         <aside className="w-80 bg-gray-900 border-r border-gray-800 flex flex-col h-full z-40 fixed md:sticky top-0 left-0 transform transition-transform duration-300 ease-in-out">
           <div className="p-4 border-b border-gray-800 flex items-center justify-between">
@@ -269,26 +360,67 @@ export default function ProfessorPage() {
                <MessageSquarePlus className="w-4 h-4"/> New Conversation
              </button>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          <div className="flex-1 overflow-y-auto p-3 space-y-1">
             {chatSessions.length === 0 ? (
               <p className="text-gray-500 text-sm text-center mt-10">No past conversations.</p>
             ) : (
               chatSessions.map(session => (
-                <button
-                  key={session.id}
-                  onClick={() => loadSession(session)}
-                  className={`w-full text-left p-3 rounded-xl transition ${currentSessionId === session.id ? 'bg-indigo-900/40 border border-indigo-700/50 text-white' : 'hover:bg-gray-800 text-gray-300 border border-transparent'}`}
-                >
-                  <div className="font-bold text-sm truncate">{session.title}</div>
-                  <div className="text-xs text-gray-500 mt-1">{new Date(session.date).toLocaleDateString()}</div>
-                </button>
+                <div key={session.id} className="relative group">
+                  {renamingId === session.id ? (
+                    /* Inline rename input */
+                    <div className="flex gap-2 p-2 bg-gray-800 rounded-xl border border-indigo-600">
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') confirmRename(); if (e.key === 'Escape') setRenamingId(null); }}
+                        className="flex-1 bg-gray-700 text-white text-sm px-2 py-1 rounded border border-gray-600 focus:outline-none focus:border-indigo-500"
+                      />
+                      <button onClick={confirmRename} className="text-green-400 hover:text-green-300 p-1 flex-shrink-0"><Check className="w-4 h-4"/></button>
+                      <button onClick={() => setRenamingId(null)} className="text-gray-400 hover:text-white p-1 flex-shrink-0"><X className="w-3.5 h-3.5"/></button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => loadSession(session)}
+                        className={`w-full text-left p-3 pr-9 rounded-xl transition ${currentSessionId === session.id ? 'bg-indigo-900/40 border border-indigo-700/50 text-white' : 'hover:bg-gray-800 text-gray-300 border border-transparent'}`}
+                      >
+                        <div className="font-bold text-sm truncate">{session.title}</div>
+                        <div className="text-xs text-gray-500 mt-1">{new Date(session.date).toLocaleDateString()}</div>
+                      </button>
+                      {/* Three-dot menu button */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setMenuOpenFor(menuOpenFor === session.id ? null : session.id); }}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 text-gray-600 hover:text-gray-300 rounded-lg opacity-0 group-hover:opacity-100 transition z-50"
+                      >
+                        <MoreVertical className="w-4 h-4"/>
+                      </button>
+                      {/* Dropdown menu */}
+                      {menuOpenFor === session.id && (
+                        <div className="absolute right-2 top-full mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 w-36 overflow-hidden">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setRenamingId(session.id); setRenameValue(session.title); setMenuOpenFor(null); }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-700 transition flex items-center gap-2"
+                          >
+                            ✏️ Rename
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteSessionHandler(session.id); }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-gray-700 transition flex items-center gap-2"
+                          >
+                            🗑️ Delete
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               ))
             )}
           </div>
         </aside>
       )}
 
-      {/* FIX 4: Main area dark-only */}
       <main className="flex-1 h-full flex flex-col relative bg-[#0F172A] z-10">
         <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between shadow-sm z-20">
           <div className="flex items-center gap-3">
@@ -308,10 +440,11 @@ export default function ProfessorPage() {
              <button onClick={() => setShowChatLog(!showChatLog)} className={`hidden md:flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition text-sm ${showChatLog ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700'}`}>
                <Clock className="w-4 h-4"/> History
              </button>
-             {tier === 'free' && (
-                <div className="text-xs font-bold text-gray-400 bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700">
-                  {profile?.chat_stats?.date === new Date().toISOString().split('T')[0] ? 2 - (profile.chat_stats?.count || 0) : 2} / 2 msgs left
-                </div>
+             {/* FIX: Show message limit for BOTH free and pro users */}
+             {user && (
+               <div className="text-xs font-bold text-gray-400 bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-700">
+                 {msgsLeft} / {dailyLimit} msgs left
+               </div>
              )}
           </div>
         </header>
@@ -346,7 +479,7 @@ export default function ProfessorPage() {
           <div ref={chatEndRef} />
         </div>
 
-        {/* FIX 2: Chat input area with drag and drop */}
+        {/* Chat input area with drag and drop */}
         <div
           className={`bg-gray-900 border-t p-4 pb-6 z-20 transition-all ${chatDragOver ? 'border-indigo-500 bg-indigo-900/20' : 'border-gray-800'}`}
           onDragOver={handleChatDragOver}
